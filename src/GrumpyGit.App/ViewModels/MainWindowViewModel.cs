@@ -645,7 +645,19 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusMessage = "Pushing…";
         try
         {
-            await _git.PushAsync(RepoPath);
+            // Name the branch explicitly rather than relying on the remote's
+            // push.default. A bare `git push origin` fails outright on a branch with no
+            // upstream — exactly the case where pressing Push is most expected to do
+            // something. Skipped in detached HEAD, where CurrentBranch is a
+            // "(detached) <sha>" label rather than a ref that can be pushed.
+            var branch = Branches.Contains(CurrentBranch) ? CurrentBranch : null;
+            await _git.PushAsync(RepoPath, "origin", branch);
+
+            // Reload so the graph, ref pills and unpushed badges reflect the new remote
+            // state. Pull and Commit already do this; without it a successful push left
+            // every commit it published still badged "unpushed" until the repo was
+            // reopened, which reads as the push having silently done nothing.
+            await LoadRepoAsync(RepoPath);
             ShowToast("Push complete", ToastSeverity.Success);
         }
         catch (Exception ex)
