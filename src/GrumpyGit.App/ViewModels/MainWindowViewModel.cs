@@ -604,9 +604,9 @@ public partial class MainWindowViewModel : ViewModelBase
             _loadedCommitCount = 0;
             LoadNextCommitPage();
 
-            StatusMessage = HasAiSessions
-                ? $"Loaded {nodes.Count} commit(s) · {AiSummaryLabel}"
-                : $"Loaded {nodes.Count} commit(s)";
+            // The AI-session count used to be appended here. It advertised a panel that
+            // can no longer be opened, so it read as a broken promise.
+            StatusMessage = $"Loaded {nodes.Count} commit(s)";
 
             // Check for rebase in progress
             IsRebaseInProgress = await _git.IsRebaseInProgressAsync(RepoPath);

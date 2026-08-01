@@ -205,23 +205,12 @@
                             Spacing="2"
                             VerticalAlignment="Center">
 
-                    <!-- AI review entry point, withdrawn while its direction is decided.
-                         The panel, viewmodels and review-state storage are all still
-                         wired up and reachable from ToggleAiReviewCommand — only this
-                         button is hidden, so re-enabling it is a one-line change. -->
-                    <Button Command="{Binding ToggleAiReviewCommand}"
-                            IsEnabled="{Binding HasAiSessions}"
-                            IsVisible="False"
-                            Margin="0,0,8,0"
-                            ToolTip.Tip="Review AI-authored changes (Ctrl+Shift+R)">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Path Classes="icon sm ai" Data="{DynamicResource IconSparkles}"/>
-                            <TextBlock Text="AI Review" VerticalAlignment="Center"/>
-                            <Border Classes="badge ai" IsVisible="{Binding HasAiSessions}">
-                                <TextBlock Text="{Binding AiCommitCount}"/>
-                            </Border>
-                        </StackPanel>
-                    </Button>
+                    <!-- The AI review entry point lived here. Withdrawn while its
+                         direction is decided: the toolbar button, the Ctrl+Shift+R
+                         shortcut, the status-bar session count and the overlay are all
+                         gone. AiReviewPanel, MainWindowViewModel.AiReview.cs and the
+                         review-state storage are untouched, so restoring it is a matter
+                         of putting these entry points back, not rebuilding the feature. -->
 
                     <Button Classes="icon-only"
                             Command="{Binding ToggleGraphCommand}"
@@ -1825,36 +1814,8 @@
                                 Height="250"
                                 IsVisible="{Binding IsConsoleVisible}"/>
 
-        <!-- ── AI session review overlay ─────────────────────────────────── -->
-        <Border Grid.Row="0" Grid.RowSpan="6"
-                ZIndex="140"
-                Classes="scrim"
-                IsVisible="{Binding IsAiReviewVisible}">
-            <Border Classes="card"
-                    Margin="40"
-                    ClipToBounds="True"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch">
-                <Grid RowDefinitions="Auto,*">
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,14,12,10">
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
-                            <Path Classes="icon lg ai" Data="{StaticResource IconSparkles}"/>
-                            <StackPanel Spacing="1">
-                                <TextBlock Text="AI Review" Classes="subtitle"/>
-                                <TextBlock Text="{Binding AiSummaryLabel}" Classes="caption"/>
-                            </StackPanel>
-                        </StackPanel>
-                        <Button Grid.Column="1"
-                                Classes="subtle icon-only"
-                                ToolTip.Tip="Close (Esc)"
-                                Command="{Binding ToggleAiReviewCommand}">
-                            <Path Classes="icon" Data="{StaticResource IconClose}"/>
-                        </Button>
-                    </Grid>
-                    <controls:AiReviewPanel Grid.Row="1"/>
-                </Grid>
-            </Border>
-        </Border>
+        <!-- The AI session review overlay was hosted here. Removed with the rest of the
+             feature's surface; AiReviewPanel itself still exists and can be re-hosted. -->
 
         <!-- ── Repository quick switcher (Ctrl+P) ────────────────────────── -->
         <controls:RepoQuickSwitcher Grid.Row="0" Grid.RowSpan="6"

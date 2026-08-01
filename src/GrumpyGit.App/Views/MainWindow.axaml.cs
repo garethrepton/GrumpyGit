@@ -134,13 +134,9 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // Ctrl+Shift+R — AI review
-            if (e.Key == Key.R && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
-            {
-                vm.ToggleAiReviewCommand.Execute(null);
-                e.Handled = true;
-                return;
-            }
+            // Ctrl+Shift+R used to open AI review. Withdrawn with the rest of that
+            // feature's entry points — a shortcut that still opens a panel nothing
+            // advertises is worse than no shortcut, because it fires by accident.
 
             // Ctrl+Tab / Ctrl+Shift+Tab — cycle open repositories
             if (e.Key == Key.Tab && e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -195,7 +191,7 @@ public partial class MainWindow : Window
                 // Full-screen diff is the outermost "mode", so it unwinds last —
                 // after any overlay drawn on top of it has been dismissed.
                 if (vm.IsDiffFullScreen
-                    && !vm.IsQuickSwitchVisible && !vm.IsAiReviewVisible && !vm.IsSettingsVisible)
+                    && !vm.IsQuickSwitchVisible && !vm.IsSettingsVisible)
                 {
                     vm.ToggleDiffFullScreenCommand.Execute(null);
                     e.Handled = true;
@@ -204,12 +200,6 @@ public partial class MainWindow : Window
                 if (vm.IsQuickSwitchVisible)
                 {
                     vm.CloseQuickSwitchCommand.Execute(null);
-                    e.Handled = true;
-                    return;
-                }
-                if (vm.IsAiReviewVisible)
-                {
-                    vm.ToggleAiReviewCommand.Execute(null);
                     e.Handled = true;
                     return;
                 }
