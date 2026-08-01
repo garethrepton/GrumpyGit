@@ -5,6 +5,19 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- Product name is "Grumpy" (the git part is implied), so the shipped
+         executable is Grumpy.exe. The C# namespaces stay GrumpyGit.* — renaming
+         those would churn every file for no user-visible benefit.
+         NOTE: avares:// URIs are keyed on the ASSEMBLY name, so App.axaml
+         references avares://Grumpy/... and must be kept in step with this. -->
+    <AssemblyName>Grumpy</AssemblyName>
+    <RootNamespace>GrumpyGit.App</RootNamespace>
+    <ApplicationIcon>Assets\grumpy.ico</ApplicationIcon>
+
+    <Product>Grumpy</Product>
+    <AssemblyTitle>Grumpy</AssemblyTitle>
+    <Description>A visual git client built around reviewing AI-authored changes.</Description>
   </PropertyGroup>
 
   <ItemGroup>

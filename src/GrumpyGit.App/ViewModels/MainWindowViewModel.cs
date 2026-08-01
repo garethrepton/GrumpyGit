@@ -153,6 +153,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ChangedFiles.Clear();
         StagedFiles.Clear();
         CurrentDiff = null;
+        ClearImageDiff();
         DiffFilePath = null;
         SelectedFile = null;
         LinkedIssues.Clear();
@@ -255,6 +256,7 @@ public partial class MainWindowViewModel : ViewModelBase
         RefreshFocusedStagingState();
         LoadNoteForCurrentFile();
         CurrentDiff = null;
+        ClearImageDiff();
         DiffFilePath = null;
         if (value is not null && SelectedCommit is not null)
             _ = LoadDiffAsync(SelectedCommit, value);
@@ -265,6 +267,16 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusMessage = "Loading diff…";
         try
         {
+            // Picture files get rendered rather than diffed as text — a unified diff of
+            // a PNG conveys nothing. Falls through to the text path for everything else.
+            if (await TryLoadImageDiffAsync(commit, file))
+            {
+                StatusMessage = string.Empty;
+                return;
+            }
+
+            ClearImageDiff();
+
             ParsedDiff parsed;
             bool isStaged = false;
             if (commit.IsWorkingTree)
@@ -429,6 +441,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 // File no longer has changes (fully staged/unstaged)
                 CurrentDiff = null;
+                ClearImageDiff();
                 DiffFilePath = null;
                 DiffHunks.Clear();
             }
@@ -471,6 +484,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Commits.Clear();
         ChangedFiles.Clear();
         CurrentDiff = null;
+        ClearImageDiff();
         DiffFilePath = null;
         SelectedCommit = null;
         SelectedFile = null;

@@ -106,7 +106,7 @@ public class GitHubService
             throw new InvalidOperationException(
                 "No GitHub token found. Ensure Git Credential Manager is configured for github.com.");
 
-        _client = new GitHubClient(new ProductHeaderValue("GrumpyGit"))
+        _client = new GitHubClient(new ProductHeaderValue("Grumpy"))
         {
             Credentials = new Octokit.Credentials(token)
         };

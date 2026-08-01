@@ -2,7 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- ═══════════════════════════════════════════════════════════════════════
-         GrumpyGit design tokens.
+         Grumpy design tokens.
 
          Every colour, radius, spacing value and font size in the app resolves
          through this file. Nothing downstream should contain a literal hex.
@@ -225,6 +225,24 @@
     <x:Double x:Key="FontSizeCode">12.5</x:Double>
 
     <FontFamily x:Key="MonoFontFamily">Cascadia Code,JetBrains Mono,Consolas,Menlo,monospace</FontFamily>
+
+    <!-- Transparency checkerboard behind image previews. Without it a transparent PNG
+         is indistinguishable from an empty pane on a dark background. Not themed: the
+         point is to read as "nothing here", which the same neutral greys do in both
+         light and dark. -->
+    <DrawingBrush x:Key="CheckerBrush"
+                  TileMode="Tile"
+                  SourceRect="0,0,16,16"
+                  DestinationRect="0,0,16,16"
+                  Stretch="None">
+        <DrawingBrush.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="#2A2E38" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                <GeometryDrawing Brush="#353A46" Geometry="M0,0 L8,0 L8,8 L0,8 Z"/>
+                <GeometryDrawing Brush="#353A46" Geometry="M8,8 L16,8 L16,16 L8,16 Z"/>
+            </DrawingGroup>
+        </DrawingBrush.Drawing>
+    </DrawingBrush>
 
     <!-- Corner radii -->
     <CornerRadius x:Key="RadiusSm">4</CornerRadius>

@@ -705,6 +705,70 @@ public class GitService : IGitService
         return stats;
     }
 
+    /// <summary>
+    /// Raw bytes of a file as it existed at a given revision.
+    ///
+    /// Binary-safe: the output is piped straight to a stream rather than going through
+    /// <c>ExecuteBufferedAsync</c>, which decodes stdout as text and would silently
+    /// mangle every byte that is not valid in the current encoding — fatal for images.
+    /// </summary>
+    /// <param name="rev">
+    /// Any revision git accepts for <c>rev:path</c> — a commit hash, <c>HEAD</c>, or an
+    /// index stage such as <c>:0</c>. Hashes are validated; the small set of symbolic
+    /// forms the app uses is allow-listed.
+    /// </param>
+    /// <returns>The blob contents, or an empty array when the path does not exist at
+    /// that revision (a file that was added, or deleted, has no "before" or "after").</returns>
+    public async Task<byte[]> GetFileBlobAsync(
+        string repoPath, string rev, string filePath, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateFilePath(repoPath, filePath);
+        ValidateRevision(rev);
+
+        using var buffer = new MemoryStream();
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("show")
+                .Add($"{rev}:{filePath}"))
+            .WithWorkingDirectory(repoPath)
+            .WithStandardOutputPipe(PipeTarget.ToStream(buffer))
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteAsync(ct);
+
+        // A missing path at that revision is an expected outcome, not an error: it is
+        // exactly what an added or deleted file looks like from one side.
+        return result.ExitCode == 0 ? buffer.ToArray() : [];
+    }
+
+    private static readonly HashSet<string> AllowedSymbolicRevisions =
+        new(StringComparer.Ordinal) { "HEAD", "HEAD^", "HEAD~1", ":0", ":1", ":2", ":3" };
+
+    /// <summary>
+    /// Accepts a commit hash or one of the few symbolic revisions the app uses.
+    ///
+    /// Without this, a caller could pass something like <c>--upload-pack=...</c> and
+    /// have it land in the argument list. Everything else in this class validates its
+    /// refs; this keeps that property intact for blob reads.
+    /// </summary>
+    private static void ValidateRevision(string rev)
+    {
+        if (string.IsNullOrWhiteSpace(rev))
+            throw new ArgumentException("Revision must not be empty.", nameof(rev));
+
+        if (AllowedSymbolicRevisions.Contains(rev))
+            return;
+
+        // Allow a hash, optionally with a single ^ or ~1 suffix for "the parent of".
+        var bare = rev.EndsWith("^", StringComparison.Ordinal) ? rev[..^1]
+                 : rev.EndsWith("~1", StringComparison.Ordinal) ? rev[..^2]
+                 : rev;
+
+        if (!HexHashPattern.IsMatch(bare))
+            throw new ArgumentException($"Invalid revision: '{rev}'", nameof(rev));
+    }
+
     /// <summary>Net diff for a single file between two commits.</summary>
     public async Task<string> GetCommitRangeFileDiffAsync(
         string repoPath, string fromHash, string toHash, string filePath, CancellationToken ct = default)

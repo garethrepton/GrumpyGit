@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GrumpyGit.App.ViewModels"
+             mc:Ignorable="d"
+             x:Class="GrumpyGit.App.Controls.ImageDiffViewer"
+             x:DataType="vm:ImageDiffViewModel">
+
+    <!-- Before / after preview for picture files. Mirrors the text diff's BEFORE|AFTER
+         layout so switching between a code file and an image doesn't move the eye. -->
+
+    <Grid RowDefinitions="Auto,*" Background="{DynamicResource EditorBgBrush}">
+
+        <!-- ── Summary strip ──────────────────────────────────────────────── -->
+        <Border Grid.Row="0" Classes="chrome" Padding="12,8">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <Border Classes="badge">
+                    <TextBlock Text="{Binding ChangeSummary}"/>
+                </Border>
+                <TextBlock Text="{Binding SizeDelta}"
+                           Classes="caption mono"
+                           VerticalAlignment="Center"/>
+                <!-- A resize is easy to miss when both sides are scaled to fit. -->
+                <Border Classes="badge warn" IsVisible="{Binding DimensionsChanged}">
+                    <TextBlock Text="dimensions changed"/>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,1,*">
+
+            <!-- ── Before ─────────────────────────────────────────────────── -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+                <Border Grid.Row="0" Classes="pane-header">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Border Width="7" Height="7" CornerRadius="2"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource DeleteFgBrush}"/>
+                        <TextBlock Classes="strip-label" Text="BEFORE"/>
+                    </StackPanel>
+                </Border>
+
+                <Panel Grid.Row="1" Margin="16">
+                    <!-- Checkerboard: without it, a transparent PNG is indistinguishable
+                         from an empty pane against the dark editor background. -->
+                    <Border Background="{DynamicResource CheckerBrush}"
+                            IsVisible="{Binding Before.HasImage}"/>
+                    <Image Source="{Binding Before.Image}"
+                           Stretch="Uniform"
+                           StretchDirection="DownOnly"
+                           RenderOptions.BitmapInterpolationMode="HighQuality"
+                           IsVisible="{Binding Before.HasImage}"/>
+
+                    <StackPanel Classes="empty-state" IsVisible="{Binding Before.IsAbsent}">
+                        <TextBlock Classes="empty-title" Text="Not present"/>
+                        <TextBlock Classes="empty-body" Text="This file was added in this change."/>
+                    </StackPanel>
+
+                    <StackPanel Classes="empty-state" IsVisible="{Binding Before.FailedToDecode}">
+                        <TextBlock Classes="empty-title" Text="Cannot preview"/>
+                        <TextBlock Classes="empty-body" Text="The file could not be decoded as an image."/>
+                    </StackPanel>
+                </Panel>
+
+                <Border Grid.Row="2" Classes="chrome" Padding="12,6">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock Text="{Binding Before.Dimensions}" Classes="caption mono"/>
+                        <TextBlock Text="{Binding Before.SizeLabel}" Classes="caption mono"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Grid.Column="1" Background="{DynamicResource BorderSubtleBrush}"/>
+
+            <!-- ── After ──────────────────────────────────────────────────── -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto">
+                <Border Grid.Row="0" Classes="pane-header">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Border Width="7" Height="7" CornerRadius="2"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource AddFgBrush}"/>
+                        <TextBlock Classes="strip-label" Text="AFTER"/>
+                    </StackPanel>
+                </Border>
+
+                <Panel Grid.Row="1" Margin="16">
+                    <Border Background="{DynamicResource CheckerBrush}"
+                            IsVisible="{Binding After.HasImage}"/>
+                    <Image Source="{Binding After.Image}"
+                           Stretch="Uniform"
+                           StretchDirection="DownOnly"
+                           RenderOptions.BitmapInterpolationMode="HighQuality"
+                           IsVisible="{Binding After.HasImage}"/>
+
+                    <StackPanel Classes="empty-state" IsVisible="{Binding After.IsAbsent}">
+                        <TextBlock Classes="empty-title" Text="Not present"/>
+                        <TextBlock Classes="empty-body" Text="This file was deleted in this change."/>
+                    </StackPanel>
+
+                    <StackPanel Classes="empty-state" IsVisible="{Binding After.FailedToDecode}">
+                        <TextBlock Classes="empty-title" Text="Cannot preview"/>
+                        <TextBlock Classes="empty-body" Text="The file could not be decoded as an image."/>
+                    </StackPanel>
+                </Panel>
+
+                <Border Grid.Row="2" Classes="chrome" Padding="12,6">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock Text="{Binding After.Dimensions}" Classes="caption mono"/>
+                        <TextBlock Text="{Binding After.SizeLabel}" Classes="caption mono"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

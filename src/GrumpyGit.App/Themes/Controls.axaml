@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- ═══════════════════════════════════════════════════════════════════════
-         GrumpyGit control styles.
+         Grumpy control styles.
 
          Everything here resolves colour through Themes/Tokens.axaml via
          DynamicResource so the whole app follows the theme variant. Add new

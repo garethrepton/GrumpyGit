@@ -25,11 +25,11 @@ public class AppSettings
     /// <summary>Which of <see cref="OpenRepositories"/> was focused, so it reopens focused.</summary>
     public string ActiveRepository { get; set; } = string.Empty;
 
-    private static readonly string SettingsDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "GrumpyGit");
+    // Resolved through AppPaths so the rename from "GrumpyGit" to "Grumpy" carries
+    // existing settings across instead of silently starting from defaults.
+    private static string SettingsDir => AppPaths.Root;
 
-    private static readonly string SettingsPath = Path.Combine(SettingsDir, "settings.json");
+    private static string SettingsPath => AppPaths.SettingsFile;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

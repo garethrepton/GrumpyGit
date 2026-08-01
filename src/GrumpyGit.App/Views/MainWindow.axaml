@@ -8,8 +8,8 @@
         d:DesignWidth="1200" d:DesignHeight="700"
         x:Class="GrumpyGit.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
-        Title="GrumpyGit"
+        Icon="/Assets/grumpy.ico"
+        Title="Grumpy"
         Background="{DynamicResource BgBaseBrush}"
         MinWidth="800"
         MinHeight="500">
@@ -1541,7 +1541,12 @@
                                                  IsWorkingTree="{Binding IsWorkingTreeSelected}"
                                                  CanStage="{Binding CanStageFromDiff}"
                                                  CollapseUnchanged="{Binding ShouldCollapseUnchanged}"
-                                                 IsVisible="{Binding !IsBlameVisible}"/>
+                                                 IsVisible="{Binding IsTextDiffVisible}"/>
+
+                            <!-- Image preview replaces the text diff for picture files -->
+                            <controls:ImageDiffViewer Grid.Row="4"
+                                                      DataContext="{Binding ImageDiff}"
+                                                      IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).IsImageDiff}"/>
 
                             <!-- Blame view (alternative) -->
                             <controls:BlameViewer x:Name="BlameViewerControl"

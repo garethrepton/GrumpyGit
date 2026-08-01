@@ -1,0 +1,178 @@
+name: Build installer
+
+# Tag-driven releases, plus a manual button so the installer can be built and
+# downloaded as an artifact without publishing anything.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp the build with (e.g. 0.1.0)'
+        required: false
+        default: '0.0.0'
+
+permissions:
+  contents: write   # needed to create the release; nothing else
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # A tag push gives v1.2.3; strip the leading v. A manual run uses the
+      # supplied input. Everything downstream reads this one value so the
+      # assembly, the installer filename and the release tag cannot disagree.
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $v = $env:GITHUB_REF -replace '^refs/tags/v', ''
+          } else {
+            $v = '${{ github.event.inputs.version }}'
+            if ([string]::IsNullOrWhiteSpace($v)) { $v = '0.0.0' }
+          }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Building version $v"
+
+      - name: Restore
+        run: dotnet restore GrumpyGit.sln
+
+      - name: Build
+        run: dotnet build GrumpyGit.sln -c Release --no-restore
+
+      # Gate the release on the tests actually passing — an installer built from
+      # a broken tree is worse than no installer.
+      - name: Test
+        run: dotnet test tests/GrumpyGit.Core.Tests/GrumpyGit.Core.Tests.csproj -c Release --no-build --verbosity normal
+
+      # Self-contained so the user does not need a .NET runtime installed. Not
+      # single-file: Avalonia's native assets are more reliably loaded from a
+      # normal folder layout, and the installer packages the folder anyway.
+      - name: Publish
+        run: >
+          dotnet publish src/GrumpyGit.App/GrumpyGit.App.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:AssemblyVersion=${{ steps.version.outputs.version }}.0
+          -p:FileVersion=${{ steps.version.outputs.version }}.0
+          -p:DebugType=none
+          -o publish
+
+      - name: Verify publish output
+        shell: pwsh
+        run: |
+          $exe = 'publish/Grumpy.exe'
+          if (-not (Test-Path $exe)) { throw "Expected $exe was not produced" }
+          $size = [math]::Round((Get-ChildItem publish -Recurse | Measure-Object Length -Sum).Sum / 1MB, 1)
+          Write-Host "publish/ contains $((Get-ChildItem publish -Recurse -File).Count) files, $size MB"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          & $iscc `
+            "/DAppVersion=${{ steps.version.outputs.version }}" `
+            "/DPublishDir=..\publish" `
+            "installer\Grumpy.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+
+      # Prove the installer does what it claims: installs per-user with no
+      # elevation, lands in LocalAppData, registers an uninstaller in HKCU, and
+      # then actually uninstalls. The runner user is an admin, so this does not
+      # prove the absence of a UAC prompt — PrivilegesRequired=lowest is what
+      # guarantees that, and it is asserted separately below.
+      - name: Verify install and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Get-ChildItem dist/*.exe | Select-Object -First 1
+          Write-Host "Testing $($setup.Name)"
+
+          # /VERYSILENT with no /ALLUSERS keeps it in per-user mode.
+          Start-Process -FilePath $setup.FullName `
+            -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+
+          $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Grumpy'
+          if (-not (Test-Path (Join-Path $installDir 'Grumpy.exe'))) {
+            throw "Install did not place the exe in $installDir"
+          }
+          Write-Host "OK: installed to $installDir (no admin required)"
+
+          # The uninstall entry must be under HKCU, not HKLM — that is what makes
+          # it a per-user install that shows in this user's Apps & features.
+          $key = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
+                 Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq 'Grumpy' }
+          if (-not $key) { throw 'No per-user uninstall entry found in HKCU' }
+
+          $props = Get-ItemProperty $key.PSPath
+          Write-Host "OK: uninstall entry '$($props.DisplayName)' $($props.DisplayVersion)"
+
+          if (Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
+              Where-Object { (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName -eq 'Grumpy' }) {
+            throw 'Found a machine-wide (HKLM) uninstall entry — this should be per-user only'
+          }
+          Write-Host 'OK: no machine-wide entry'
+
+          # Now uninstall. /SUPPRESSMSGBOXES answers the "delete your data?"
+          # prompt with its default (No), so settings survive — which is the
+          # intended behaviour.
+          $uninstaller = $props.UninstallString -replace '"',''
+          Start-Process -FilePath $uninstaller `
+            -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+
+          Start-Sleep -Seconds 3
+
+          if (Test-Path (Join-Path $installDir 'Grumpy.exe')) {
+            throw "Uninstall left the exe behind in $installDir"
+          }
+          if (Test-Path $installDir) {
+            $left = Get-ChildItem $installDir -Recurse -File -ErrorAction SilentlyContinue
+            if ($left) { throw "Uninstall left $($left.Count) file(s) in $installDir" }
+          }
+          Write-Host 'OK: uninstall removed all installed files'
+
+          $stillThere = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
+                        Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq 'Grumpy' }
+          if ($stillThere) { throw 'Uninstall left its registry entry behind' }
+          Write-Host 'OK: uninstall removed the registry entry'
+
+      - name: Assert installer requires no elevation
+        shell: pwsh
+        run: |
+          # Guards against someone flipping PrivilegesRequired later and silently
+          # turning this into an admin install.
+          $iss = Get-Content installer/Grumpy.iss -Raw
+          if ($iss -notmatch '(?m)^\s*PrivilegesRequired\s*=\s*lowest\s*$') {
+            throw 'installer/Grumpy.iss must set PrivilegesRequired=lowest'
+          }
+          Write-Host 'OK: PrivilegesRequired=lowest'
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Grumpy-${{ steps.version.outputs.version }}-win-x64-setup
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: Attach installer to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          generate_release_notes: true

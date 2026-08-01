@@ -25,9 +25,7 @@ public sealed class ReviewStateStore
     private readonly string _statePath;
     private Dictionary<string, HashSet<string>> _reviewed = new(StringComparer.Ordinal);
 
-    private static readonly string StateDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "GrumpyGit", "review-state");
+    private static string StateDir => AppPaths.ReviewStateDir;
 
     public ReviewStateStore(string repoPath)
     {

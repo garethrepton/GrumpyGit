@@ -22,9 +22,7 @@ public sealed class ReviewNotesStore
     private readonly string _path;
     private Dictionary<string, string> _notes = new(StringComparer.Ordinal);
 
-    private static readonly string NotesDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "GrumpyGit", "review-notes");
+    private static string NotesDir => AppPaths.ReviewNotesDir;
 
     public ReviewNotesStore(string repoPath)
     {
