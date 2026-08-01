@@ -163,8 +163,14 @@ public partial class MainWindowViewModel
     /// <summary>
     /// False = focused (hunks with a few lines of context). True = the whole file
     /// with changes highlighted in place.
+    ///
+    /// Starts on: a change reads better with its surrounding file available, and
+    /// <see cref="CollapseUnchangedRegions"/> (also on) folds the untouched runs so
+    /// the whole file is present without being noise. Set as a field initialiser
+    /// rather than in the constructor so no diff reload is triggered at startup —
+    /// there is nothing loaded to reload yet.
     /// </summary>
-    [ObservableProperty] private bool _isFullFileDiff;
+    [ObservableProperty] private bool _isFullFileDiff = true;
 
     [ObservableProperty] private bool _ignoreWhitespace;
 
@@ -375,6 +381,20 @@ public partial class MainWindowViewModel
 
         _changeAnchors = [.. anchors];
         DiffChangeCount = _changeAnchors.Length;
-        CurrentChangeIndex = -1;
+
+        // Open on the first change instead of line 1. Full-file mode renders the whole
+        // file, so the first edit is routinely hundreds of lines down and the reader
+        // would otherwise land on an unchanged header with nothing to review. This runs
+        // on every load, including option toggles, so the change stays in view rather
+        // than the file snapping back to the top each time a toggle is flipped.
+        if (_changeAnchors.Length > 0)
+        {
+            CurrentChangeIndex = 0;
+            ScrollToDiffLineRequested?.Invoke(this, _changeAnchors[0]);
+        }
+        else
+        {
+            CurrentChangeIndex = -1;
+        }
     }
 }

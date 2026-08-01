@@ -154,6 +154,10 @@ public partial class DiffViewer : UserControl
             Minimap.LineRequested += OnMinimapLineRequested;
 
             ApplyDiff();
+            // ApplyDiff drops any existing folding managers, so the initial load has to
+            // reinstall them too — otherwise a diff that was already set before the
+            // control loaded renders unfolded until the next property change.
+            ApplyFoldings();
             UpdateMinimapViewport();
         }, DispatcherPriority.Loaded);
 
@@ -274,6 +278,16 @@ public partial class DiffViewer : UserControl
     /// </summary>
     public void ScrollToDiffLine(int line)
     {
+        // A scroll requested as part of loading a diff arrives in the same beat as the
+        // document assignment, before the text view has measured the new content — the
+        // scroll would then be computed against a stale layout and land in the wrong
+        // place (or nowhere). Deferring to Render priority lets the new document lay out
+        // first. For minimap and next/previous-change use the extra frame is invisible.
+        Dispatcher.UIThread.Post(() => ScrollToDiffLineCore(line), DispatcherPriority.Render);
+    }
+
+    private void ScrollToDiffLineCore(int line)
+    {
         var document = RightEditor.Document;
         if (document is null || document.LineCount == 0) return;
 
@@ -345,6 +359,15 @@ public partial class DiffViewer : UserControl
 
     private void ApplyDiff()
     {
+        // A FoldingManager is bound to the TextDocument it was installed against, and
+        // the assignments below replace both documents outright. Uninstalling here —
+        // while the old documents are still attached — is what stops the cached
+        // managers in ApplyFoldings from outliving them: a stale manager holds
+        // collapsed sections anchored in a document the editor no longer shows, which
+        // suppresses the newly loaded lines and blanks the pane. ApplyFoldings
+        // reinstalls against the new documents immediately after.
+        ClearFoldings();
+
         var diff = Diff;
         var filePath = FilePath;
 
