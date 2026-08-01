@@ -99,20 +99,23 @@ Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait
 Type: filesandordirs; Name: "{app}"
 
 [Code]
-{ ───────────────────────────────────────────────────────────────────────────
-  User data lives outside {app}, under %LOCALAPPDATA%\GrumpyGit:
-    settings.json, review-state\, review-notes\
-  Removing it is NOT automatic — review notes are user-authored content that
-  cannot be regenerated, and a reinstall should find them intact. The user is
-  asked explicitly, and only on a full uninstall (not an upgrade).
-  ─────────────────────────────────────────────────────────────────────────── }
+// ───────────────────────────────────────────────────────────────────────────
+// User data lives outside the install directory, under %LOCALAPPDATA%\Grumpy:
+//   settings.json, review-state\, review-notes\
+// Removing it is NOT automatic — review notes are user-authored content that
+// cannot be regenerated, and a reinstall should find them intact. The user is
+// asked explicitly, and only on a full uninstall (not an upgrade).
+//
+// Note: use // comments in [Code], not { }. A brace comment containing an Inno
+// constant such as {app} is terminated early by that constant's closing brace.
+// ───────────────────────────────────────────────────────────────────────────
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir: String;
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    { Must match AppPaths.Root in the application (%LOCALAPPDATA%\Grumpy). }
+    // Must match AppPaths.Root in the application (%LOCALAPPDATA%\Grumpy).
     DataDir := ExpandConstant('{localappdata}\Grumpy');
 
     if DirExists(DataDir) then
