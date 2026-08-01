@@ -205,10 +205,13 @@
                             Spacing="2"
                             VerticalAlignment="Center">
 
-                    <!-- AI review is this client's reason to exist, so it is a
-                         labelled entry point rather than another anonymous icon. -->
+                    <!-- AI review entry point, withdrawn while its direction is decided.
+                         The panel, viewmodels and review-state storage are all still
+                         wired up and reachable from ToggleAiReviewCommand — only this
+                         button is hidden, so re-enabling it is a one-line change. -->
                     <Button Command="{Binding ToggleAiReviewCommand}"
                             IsEnabled="{Binding HasAiSessions}"
+                            IsVisible="False"
                             Margin="0,0,8,0"
                             ToolTip.Tip="Review AI-authored changes (Ctrl+Shift+R)">
                         <StackPanel Orientation="Horizontal" Spacing="6">
@@ -1303,7 +1306,8 @@
                         <!-- header | linked issues | staging strip | staging notice | viewer.
                              Each strip gets its own row: they can be visible at the same
                              time, so sharing a row would overlap them. -->
-                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+                        <!-- Row 4 is the change summary; the diff itself is the star row. -->
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
                             <Border Grid.Row="0" Classes="pane-header">
                                 <DockPanel>
                                     <StackPanel Orientation="Horizontal"
@@ -1371,6 +1375,37 @@
                                                 ToolTip.Tip="More context">
                                             <Path Classes="icon sm" Data="{DynamicResource IconPlus}"/>
                                         </Button>
+
+                                        <Border Classes="divider" Width="1" Height="16" Margin="5,0"/>
+
+                                        <!-- ── Experimental presentations ──────────────────────────
+                                             Three readings of the same parsed diff. Mutually
+                                             exclusive, so they behave as a radio group: each button
+                                             is checked when its mode is active and selects that mode
+                                             when pressed. To retire one, delete its button, its enum
+                                             member and its Apply* method — nothing else refers to it. -->
+                                        <ToggleButton IsChecked="{Binding IsSideBySideView, Mode=OneWay}"
+                                                      Command="{Binding ShowSideBySideViewCommand}"
+                                                      Classes="sm"
+                                                      Content="Split"
+                                                      ToolTip.Tip="Old and new side by side (the classic view)"/>
+
+                                        <ToggleButton IsChecked="{Binding IsGhostView, Mode=OneWay}"
+                                                      Command="{Binding ShowGhostViewCommand}"
+                                                      Classes="sm"
+                                                      Content="Ghost"
+                                                      ToolTip.Tip="One column: the new file, with removed lines left in place struck through"/>
+
+                                        <ToggleButton IsChecked="{Binding HighlightMovedBlocks, Mode=TwoWay}"
+                                                      Classes="sm"
+                                                      Content="Moved"
+                                                      IsVisible="{Binding IsSideBySideView}"
+                                                      ToolTip.Tip="Colour blocks that only moved as moved, instead of a deletion plus an insertion"/>
+
+                                        <ToggleButton IsChecked="{Binding IsChangeSummaryVisible, Mode=TwoWay}"
+                                                      Classes="sm"
+                                                      Content="Summary"
+                                                      ToolTip.Tip="List the symbols this change touches; click one to jump to it"/>
 
                                         <Border Classes="divider" Width="1" Height="16" Margin="5,0"/>
 
@@ -1574,8 +1609,87 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- ── Semantic change summary ──────────────────────────────
+                                 What changed, by symbol, before you read a single line of
+                                 the diff. Capped in height and horizontally scrolling so a
+                                 large refactor cannot push the diff itself off screen. -->
+                            <Border Grid.Row="4"
+                                    Background="{DynamicResource BgSurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    MaxHeight="180"
+                                    IsVisible="{Binding IsChangeSummaryVisible}">
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Top"
+                                                Orientation="Horizontal"
+                                                Spacing="8"
+                                                Margin="12,7,12,5">
+                                        <TextBlock Text="CHANGED SYMBOLS" Classes="strip-label"/>
+                                        <TextBlock Text="{Binding ChangeSummaryHeader}"
+                                                   Classes="caption"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Two distinct empty states. Saying "no language
+                                         driver" when nothing is selected blames the file
+                                         for the user not having picked one yet. -->
+                                    <TextBlock DockPanel.Dock="Top"
+                                               Text="Pick a file to see the symbols it changes."
+                                               Classes="caption tertiary"
+                                               Margin="12,0,12,8"
+                                               TextWrapping="Wrap"
+                                               IsVisible="{Binding HasNoFileSelected}"/>
+
+                                    <TextBlock DockPanel.Dock="Top"
+                                               Text="No symbol-level detail for this file — git has no language driver for its type."
+                                               Classes="caption tertiary"
+                                               Margin="12,0,12,8"
+                                               TextWrapping="Wrap"
+                                               IsVisible="{Binding ShowsNoSymbolDetail}"/>
+
+                                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding ChangeSummary}"
+                                                      Margin="6,0,6,8">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:SymbolChangeViewModel">
+                                                    <Button Classes="subtle sm"
+                                                            HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Left"
+                                                            Padding="6,2"
+                                                            CommandParameter="{Binding}"
+                                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).GoToSymbolCommand}"
+                                                            ToolTip.Tip="Jump to this change">
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <TextBlock Text="{Binding KindGlyph}"
+                                                                       Classes="mono"
+                                                                       FontWeight="Bold"
+                                                                       Width="10"
+                                                                       VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding Display}"
+                                                                       Classes="mono"
+                                                                       VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding CountLabel}"
+                                                                       Classes="caption tertiary mono"
+                                                                       VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding Description}"
+                                                                       Classes="caption secondary"
+                                                                       VerticalAlignment="Center"/>
+                                                            <Border Classes="badge"
+                                                                    IsVisible="{Binding HasHunkLabel}">
+                                                                <TextBlock Text="{Binding HunkLabel}"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </Border>
+
                             <!-- Diff view (default) -->
-                            <controls:DiffViewer Grid.Row="4"
+                            <controls:DiffViewer Grid.Row="5"
                                                  x:Name="DiffViewerControl"
                                                  Diff="{Binding CurrentDiff}"
                                                  FilePath="{Binding DiffFilePath}"
@@ -1583,16 +1697,18 @@
                                                  IsWorkingTree="{Binding IsWorkingTreeSelected}"
                                                  CanStage="{Binding CanStageFromDiff}"
                                                  CollapseUnchanged="{Binding ShouldCollapseUnchanged}"
+                                                 ViewMode="{Binding DiffViewMode}"
+                                                 HighlightMoved="{Binding HighlightMovedBlocks}"
                                                  IsVisible="{Binding IsTextDiffVisible}"/>
 
                             <!-- Image preview replaces the text diff for picture files -->
-                            <controls:ImageDiffViewer Grid.Row="4"
+                            <controls:ImageDiffViewer Grid.Row="5"
                                                       DataContext="{Binding ImageDiff}"
                                                       IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).IsImageDiff}"/>
 
                             <!-- Blame view (alternative) -->
                             <controls:BlameViewer x:Name="BlameViewerControl"
-                                                  Grid.Row="4"
+                                                  Grid.Row="5"
                                                   BlameData="{Binding BlameData}"
                                                   FilePath="{Binding BlameFilePath}"
                                                   IsVisible="{Binding IsBlameVisible}"/>
@@ -1699,58 +1815,15 @@
             </Grid>
         </Grid>
 
-        <!-- ── Row 4: Interactive Terminal (ConPTY native) ─────────────── -->
-        <Border Grid.Row="4"
-                Background="{DynamicResource BgBaseBrush}"
-                BorderBrush="{DynamicResource BorderDefaultBrush}"
-                BorderThickness="0,1,0,0"
-                IsVisible="{Binding IsConsoleVisible}"
-                Height="250">
-            <Grid RowDefinitions="Auto,*,Auto">
-                <Border Grid.Row="0" Classes="pane-header">
-                    <DockPanel LastChildFill="True">
-                        <StackPanel Orientation="Horizontal"
-                                    DockPanel.Dock="Left"
-                                    Spacing="8">
-                            <Path Classes="icon sm" Data="{DynamicResource IconTerminal}"/>
-                            <TextBlock Classes="strip-label" Text="TERMINAL"/>
-                        </StackPanel>
-                        <TextBlock Text="{Binding TerminalStatus}"
-                                   Foreground="{DynamicResource DangerFgBrush}"
-                                   FontSize="{DynamicResource FontSizeLabel}"
-                                   FontFamily="{DynamicResource MonoFontFamily}"
-                                   VerticalAlignment="Center"
-                                   Margin="12,0,8,0"
-                                   TextTrimming="CharacterEllipsis"
-                                   IsVisible="{Binding TerminalStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                    </DockPanel>
-                </Border>
-                <!-- Terminal output (ANSI colour rendered) -->
-                <ScrollViewer Grid.Row="1"
-                              x:Name="TerminalScrollViewer"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Auto"
-                              Background="{DynamicResource BgBaseBrush}">
-                    <SelectableTextBlock x:Name="TerminalOutput"
-                                         FontFamily="{DynamicResource MonoFontFamily}"
-                                         FontSize="{DynamicResource FontSizeCode}"
-                                         Foreground="{DynamicResource TextPrimaryBrush}"
-                                         Padding="12,8"
-                                         TextWrapping="NoWrap"/>
-                </ScrollViewer>
-                <!-- Terminal input -->
-                <TextBox Grid.Row="2"
-                         x:Name="TerminalInput"
-                         Classes="mono"
-                         Background="{DynamicResource BgSunkenBrush}"
-                         BorderBrush="{DynamicResource BorderDefaultBrush}"
-                         BorderThickness="0,1,0,0"
-                         CornerRadius="0"
-                         Padding="12,8"
-                         Watermark="Type command and press Enter…"
-                         AcceptsReturn="False"/>
-            </Grid>
-        </Border>
+        <!-- ── Row 4: Interactive Terminal (ConPTY native) ───────────────
+             Self-contained: TerminalPanel owns its own session, VT interpreter and
+             custom-drawn output. The markup this replaced drove a separate output block
+             and input box from MainWindow's code-behind, which is what made the prompt
+             render as garbage — ConPTY redraws the prompt line with cursor-movement
+             sequences that a text block cannot honour. -->
+        <controls:TerminalPanel Grid.Row="4"
+                                Height="250"
+                                IsVisible="{Binding IsConsoleVisible}"/>
 
         <!-- ── AI session review overlay ─────────────────────────────────── -->
         <Border Grid.Row="0" Grid.RowSpan="6"

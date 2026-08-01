@@ -44,9 +44,42 @@ public static class GitProcess
         };
 
     /// <summary>
+    /// As <see cref="HardenedEnv"/>, plus default language diff drivers so hunk headers
+    /// carry the enclosing symbol. Kept separate from the base set, and applied only by
+    /// <see cref="StartForDiff"/>, because gitattributes also govern <c>text</c>,
+    /// <c>eol</c> and <c>filter</c>: forcing an attributes file onto <em>every</em>
+    /// command could change how content is checked out or committed for a user who has
+    /// a global attributes file of their own. Read-only diff rendering is the only place
+    /// the benefit is worth that surface.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string?> DiffEnv = BuildDiffEnv();
+
+    private static Dictionary<string, string?> BuildDiffEnv()
+    {
+        var env = new Dictionary<string, string?>(HardenedEnv);
+
+        var attributes = GitDiffAttributes.Path;
+        if (attributes is null)
+            return env;   // Could not write the defaults; plain hardened env still works.
+
+        env["GIT_CONFIG_COUNT"] = "4";
+        env["GIT_CONFIG_KEY_3"] = "core.attributesFile";
+        env["GIT_CONFIG_VALUE_3"] = attributes;
+        return env;
+    }
+
+    /// <summary>
     /// Begins a hardened <c>git</c> command. Always use this rather than wrapping the
     /// git executable directly, so untrusted-repo hardening cannot be omitted.
     /// </summary>
     public static Command Start() =>
         Cli.Wrap("git").WithEnvironmentVariables(HardenedEnv);
+
+    /// <summary>
+    /// A hardened command that additionally supplies default language diff drivers.
+    /// Use for diff-family commands whose hunk headers are read for symbol names; a
+    /// repository's own <c>.gitattributes</c> still wins over these defaults.
+    /// </summary>
+    public static Command StartForDiff() =>
+        Cli.Wrap("git").WithEnvironmentVariables(DiffEnv);
 }

@@ -213,9 +213,12 @@ public partial class MainWindowViewModel
             DiffHunks.Clear();
 
             CurrentDiff = parsed;
+            // Path first: the change summary is built inside UpdateDiffStats and reads
+            // DiffFilePath, so setting it afterwards would attribute this file's symbols
+            // to the previously selected path.
+            DiffFilePath = file.FilePath;
             UpdateDiffStats(parsed);
             UpdateStagingAvailability();
-            DiffFilePath = file.FilePath;
             IsDiffFromStagedFile = false;
         }
         catch (Exception ex)

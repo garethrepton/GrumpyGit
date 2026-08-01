@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -264,6 +265,94 @@ public partial class MainWindowViewModel
     partial void OnDiffRemovedCountChanged(int value) => OnPropertyChanged(nameof(DiffStatsLabel));
     partial void OnCurrentChangeIndexChanged(int value) => OnPropertyChanged(nameof(ChangePositionLabel));
 
+    // ── Experimental presentations ────────────────────────────────────────────
+    //
+    // Alternative readings of the same ParsedDiff. Each is independent of the others and
+    // of the diff options, so any one can be deleted by removing its enum member, its
+    // toolbar button and its Apply* method in DiffViewer — nothing else depends on them.
+
+    [ObservableProperty] private DiffViewMode _diffViewMode = DiffViewMode.SideBySide;
+
+    public bool IsSideBySideView => DiffViewMode == DiffViewMode.SideBySide;
+    public bool IsGhostView => DiffViewMode == DiffViewMode.Ghost;
+
+    partial void OnDiffViewModeChanged(DiffViewMode value)
+    {
+        OnPropertyChanged(nameof(IsSideBySideView));
+        OnPropertyChanged(nameof(IsGhostView));
+
+        // Hunk buttons and the minimap belong to the side-by-side layout; the other
+        // modes have no second pane to anchor them to.
+        OnPropertyChanged(nameof(CanToggleStagingForCurrentFile));
+    }
+
+    [RelayCommand]
+    private void ShowSideBySideView() => DiffViewMode = DiffViewMode.SideBySide;
+
+    [RelayCommand]
+    private void ShowGhostView() => DiffViewMode = DiffViewMode.Ghost;
+
+
+    /// <summary>Colour blocks that only moved as moved. Side-by-side only.</summary>
+    [ObservableProperty] private bool _highlightMovedBlocks;
+
+    [RelayCommand]
+    private void ToggleMovedBlocks() => HighlightMovedBlocks = !HighlightMovedBlocks;
+
+    // ── Change summary ────────────────────────────────────────────────────────
+
+    /// <summary>Symbols touched by the diff on screen, in the order the diff visits them.</summary>
+    public ObservableCollection<SymbolChangeViewModel> ChangeSummary { get; } = new();
+
+    [ObservableProperty] private bool _isChangeSummaryVisible = true;
+
+    [ObservableProperty] private string _changeSummaryHeader = string.Empty;
+
+    public bool HasChangeSummary => ChangeSummary.Count > 0;
+
+    public bool HasNoFileSelected => string.IsNullOrEmpty(DiffFilePath);
+
+    /// <summary>
+    /// A file IS selected but produced no symbols — the honest reading is that git has no
+    /// language driver for this file type, which is different from nothing being selected.
+    /// </summary>
+    public bool ShowsNoSymbolDetail => !HasNoFileSelected && ChangeSummary.Count == 0;
+
+    [RelayCommand]
+    private void ToggleChangeSummary() => IsChangeSummaryVisible = !IsChangeSummaryVisible;
+
+    /// <summary>Jumps the diff to the first edit inside the clicked symbol.</summary>
+    [RelayCommand]
+    private void GoToSymbol(SymbolChangeViewModel? symbol)
+    {
+        if (symbol is null) return;
+        ScrollToDiffLineRequested?.Invoke(this, symbol.RenderedLineNumber);
+    }
+
+    private void RebuildChangeSummary(ParsedDiff? parsed)
+    {
+        ChangeSummary.Clear();
+
+        if (parsed is not null && !string.IsNullOrEmpty(DiffFilePath))
+        {
+            var summary = ChangeSummaryBuilder.Build(DiffFilePath, parsed);
+            foreach (var symbol in summary.Symbols)
+                ChangeSummary.Add(new SymbolChangeViewModel { Model = symbol });
+
+            ChangeSummaryHeader = summary.Symbols.Count == 1
+                ? $"1 symbol  ·  +{summary.Added} −{summary.Removed}"
+                : $"{summary.Symbols.Count} symbols  ·  +{summary.Added} −{summary.Removed}";
+        }
+        else
+        {
+            ChangeSummaryHeader = string.Empty;
+        }
+
+        OnPropertyChanged(nameof(HasChangeSummary));
+        OnPropertyChanged(nameof(HasNoFileSelected));
+        OnPropertyChanged(nameof(ShowsNoSymbolDetail));
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────────
 
     [RelayCommand]
@@ -381,6 +470,8 @@ public partial class MainWindowViewModel
 
         _changeAnchors = [.. anchors];
         DiffChangeCount = _changeAnchors.Length;
+
+        RebuildChangeSummary(parsed);
 
         // Open on the first change instead of line 1. Full-file mode renders the whole
         // file, so the first edit is routinely hundreds of lines down and the reader

@@ -13,8 +13,10 @@ using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Folding;
+using AvaloniaEdit.Rendering;
 using AvaloniaEdit.TextMate;
 using GrumpyGit.App.ViewModels;
+using GrumpyGit.Core.Git;
 using GrumpyGit.Core.Models;
 using TextMateSharp.Grammars;
 
@@ -60,6 +62,29 @@ public partial class DiffViewer : UserControl
     {
         get => GetValue(CollapseUnchangedProperty);
         set => SetValue(CollapseUnchangedProperty, value);
+    }
+
+    /// <summary>Which presentation of the diff to show. See <see cref="DiffViewMode"/>.</summary>
+    public static readonly StyledProperty<DiffViewMode> ViewModeProperty =
+        AvaloniaProperty.Register<DiffViewer, DiffViewMode>(nameof(ViewMode));
+
+    public DiffViewMode ViewMode
+    {
+        get => GetValue(ViewModeProperty);
+        set => SetValue(ViewModeProperty, value);
+    }
+
+    /// <summary>
+    /// Colour blocks that merely moved as moved, rather than as an unrelated deletion
+    /// plus an unrelated insertion.
+    /// </summary>
+    public static readonly StyledProperty<bool> HighlightMovedProperty =
+        AvaloniaProperty.Register<DiffViewer, bool>(nameof(HighlightMoved));
+
+    public bool HighlightMoved
+    {
+        get => GetValue(HighlightMovedProperty);
+        set => SetValue(HighlightMovedProperty, value);
     }
 
     public static readonly StyledProperty<ICommand?> StageLinesCommandProperty =
@@ -158,6 +183,8 @@ public partial class DiffViewer : UserControl
             // reinstall them too — otherwise a diff that was already set before the
             // control loaded renders unfolded until the next property change.
             ApplyFoldings();
+            ApplyMovedHighlight();
+            ApplyViewMode();
             UpdateMinimapViewport();
         }, DispatcherPriority.Loaded);
 
@@ -288,6 +315,18 @@ public partial class DiffViewer : UserControl
 
     private void ScrollToDiffLineCore(int line)
     {
+        // Scroll whichever pane is actually on screen. Scrolling the side-by-side editors
+        // while a single-column mode is showing moved a hidden control and left the
+        // visible one sitting at the top of the file.
+        if (SingleColumnRoot.IsVisible)
+        {
+            var singleDoc = SingleEditor.Document;
+            if (singleDoc is null || singleDoc.LineCount == 0) return;
+
+            SingleEditor.ScrollToLine(Math.Clamp(line, 1, singleDoc.LineCount));
+            return;
+        }
+
         var document = RightEditor.Document;
         if (document is null || document.LineCount == 0) return;
 
@@ -313,12 +352,24 @@ public partial class DiffViewer : UserControl
             ApplyDiff();
             Minimap.Diff = Diff;
             ApplyFoldings();
+            ApplyMovedHighlight();
+            ApplyViewMode();
             UpdateMinimapViewport();
         }
 
         if (change.Property == CollapseUnchangedProperty)
         {
             ApplyFoldings();
+        }
+
+        if (change.Property == ViewModeProperty)
+        {
+            ApplyViewMode();
+        }
+
+        if (change.Property == HighlightMovedProperty)
+        {
+            ApplyMovedHighlight();
         }
 
         if (change.Property == HunkViewModelsProperty
@@ -412,6 +463,171 @@ public partial class DiffViewer : UserControl
         Dispatcher.UIThread.Post(PositionHunkButtons, DispatcherPriority.Render);
     }
 
+    // ── Alternative presentations ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Shows the pane the current mode needs and fills it: the two-editor side-by-side
+    /// layout, or the single-column pane the ghost view draws into.
+    /// </summary>
+    private void ApplyViewMode()
+    {
+        var single = ViewMode is DiffViewMode.Ghost;
+
+        SideBySideRoot.IsVisible = !single;
+        SingleColumnRoot.IsVisible = single;
+
+        if (!single)
+        {
+            // Free the single-column document rather than leaving a whole second copy of
+            // the file alive behind a hidden pane, and drop its renderers with it.
+            ClearSingleColumnRenderers();
+            SingleEditor.Document = new TextDocument();
+            return;
+        }
+
+        // Renderers are cleared BEFORE the document is swapped, so no renderer is ever
+        // holding line numbers from one document while the editor is showing another.
+        ClearSingleColumnRenderers();
+
+        ApplyGhost();
+    }
+
+    /// <summary>
+    /// Shows the new file with the text each edit replaced superimposed on it, faded and
+    /// struck through. The document is the AFTER side unchanged — the parser already pads
+    /// both sides to the same rows, so the old line for row N is simply the left side's
+    /// row N and the overlay needs no alignment work of its own.
+    /// </summary>
+    private void ApplyGhost()
+    {
+        SingleColumnLabel.Text = "GHOST";
+        SingleColumnHint.Text = "replaced text overlaid in place, faded and struck through";
+
+        var diff = Diff;
+        if (diff is null)
+        {
+            SingleEditor.Document = new TextDocument();
+            return;
+        }
+
+        SingleEditor.Document = new TextDocument(diff.RightText);
+
+        var leftLines = diff.LeftText.Split('\n');
+        var rightLines = diff.RightText.Split('\n');
+
+        var overlay = new Dictionary<int, string>();
+        for (var row = 1; row <= rightLines.Length; row++)
+        {
+            var left = row <= leftLines.Length ? leftLines[row - 1] : string.Empty;
+            if (left.Length == 0) continue;
+
+            // Only where the two sides actually differ; an unchanged row would otherwise
+            // draw its own text on top of itself and just look like bad antialiasing.
+            if (string.Equals(left, rightLines[row - 1], StringComparison.Ordinal)) continue;
+
+            overlay[row] = left;
+        }
+
+        var renderers = SingleEditor.TextArea.TextView.BackgroundRenderers;
+
+        renderers.Add(new DiffLineBackgroundRenderer(
+            diff.RightColoredLines,
+            ThemeTokens.Brush("DiffAddLineBrush", Brushes.Transparent),
+            Brushes.Transparent,
+            diff.HunkHeaderLines,
+            ThemeTokens.Brush("DiffHunkLineBrush", Brushes.Transparent),
+            []));
+
+        // A tint on the rows carrying an overlay, so a ghost is findable when scrolling
+        // fast — the overlay text itself is deliberately too faint to catch the eye.
+        renderers.Add(new DiffLineBackgroundRenderer(
+            [.. overlay.Keys],
+            ThemeTokens.Brush("DiffGhostLineBrush", Brushes.Transparent),
+            Brushes.Transparent,
+            [],
+            Brushes.Transparent,
+            []));
+
+        renderers.Add(new GhostOverlayRenderer(
+            overlay,
+            ThemeTokens.Brush("DiffGhostFgBrush", Brushes.Gray),
+            new Typeface(SingleEditor.FontFamily, FontStyle.Italic),
+            SingleEditor.FontSize));
+
+        SetGhostTransformer([]);
+    }
+
+    /// <summary>
+    /// Strips every renderer the single-column modes install, so each mode starts from a
+    /// clean pane. Centralised because the modes share one editor: a mode that removed
+    /// only its own renderer type would leave the previous mode's still attached, drawing
+    /// the last file's content over the new one.
+    /// </summary>
+    private void ClearSingleColumnRenderers()
+    {
+        var renderers = SingleEditor.TextArea.TextView.BackgroundRenderers;
+
+        foreach (var old in renderers.OfType<DiffLineBackgroundRenderer>().ToList())
+            renderers.Remove(old);
+        foreach (var old in renderers.OfType<GhostOverlayRenderer>().ToList())
+            renderers.Remove(old);
+        foreach (var old in renderers.OfType<MovedBlockBackgroundRenderer>().ToList())
+            renderers.Remove(old);
+
+        SetGhostTransformer([]);
+    }
+
+    private void SetGhostTransformer(IReadOnlyList<int> ghostLines)
+    {
+        var transformers = SingleEditor.TextArea.TextView.LineTransformers;
+        foreach (var old in transformers.OfType<GhostLineTransformer>().ToList())
+            transformers.Remove(old);
+
+        if (ghostLines.Count == 0) return;
+
+        transformers.Add(new GhostLineTransformer(
+            ghostLines, ThemeTokens.Brush("DiffGhostFgBrush", Brushes.Gray)));
+    }
+
+    /// <summary>
+    /// Tints blocks that only moved. Applied on top of the add/remove renderers so the
+    /// move colour wins on the lines it claims, turning a re-ordering from a wall of
+    /// red-and-green into a pair of labelled blocks.
+    /// </summary>
+    private void ApplyMovedHighlight()
+    {
+        foreach (var editor in new[] { LeftEditor, RightEditor })
+        {
+            var renderers = editor.TextArea.TextView.BackgroundRenderers;
+            foreach (var old in renderers.OfType<MovedBlockBackgroundRenderer>().ToList())
+                renderers.Remove(old);
+        }
+
+        var diff = Diff;
+        if (!HighlightMoved || diff is null) return;
+
+        var moves = MovedBlockDetector.Detect(diff);
+        if (moves.Count == 0) return;
+
+        var brush = ThemeTokens.Brush("DiffMovedLineBrush", Brushes.Transparent);
+
+        var fromLines = new List<int>();
+        var toLines = new List<int>();
+        foreach (var move in moves)
+        {
+            for (var i = 0; i < move.Length; i++)
+            {
+                fromLines.Add(move.FromLine + i);
+                toLines.Add(move.ToLine + i);
+            }
+        }
+
+        LeftEditor.TextArea.TextView.BackgroundRenderers.Add(
+            new MovedBlockBackgroundRenderer(fromLines, brush));
+        RightEditor.TextArea.TextView.BackgroundRenderers.Add(
+            new MovedBlockBackgroundRenderer(toLines, brush));
+    }
+
     private static void SetBackgroundRenderer(
         TextEditor editor,
         IReadOnlyList<int> coloredLines,
@@ -462,10 +678,31 @@ public partial class DiffViewer : UserControl
         if (!CanStage)
             return;
 
+        // The buttons overlay the left editor. In the single-column modes that pane is
+        // collapsed, so there is nothing to position them against — and a collapsed
+        // editor is exactly the state that makes the check below throw.
+        if (!SideBySideRoot.IsVisible)
+            return;
+
         var textView = LeftEditor.TextArea.TextView;
         var document = LeftEditor.Document;
-        if (document == null || textView.VisualLines.Count == 0)
+        if (document == null)
             return;
+
+        // TextView.VisualLines THROWS VisualLinesInvalidException when the layout is not
+        // currently valid — reading it is not the safe test it looks like. This runs from
+        // a ScrollChanged raised during a layout pass, where that is a routine state, so
+        // the access has to be guarded rather than merely null-checked. Skipping this
+        // pass costs nothing: another layout pass follows and repositions the buttons.
+        try
+        {
+            if (textView.VisualLines.Count == 0)
+                return;
+        }
+        catch (VisualLinesInvalidException)
+        {
+            return;
+        }
 
         foreach (var hunkVm in hunks)
         {

@@ -1,20 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GrumpyGit.App.Controls;
 using GrumpyGit.App.ViewModels;
-using GrumpyGit.Core.Terminal;
 
 namespace GrumpyGit.App.Views;
 
@@ -28,20 +21,6 @@ public partial class MainWindow : Window
     private FileChangeViewModel? _pendingDrag;
     private Point _dragOrigin;
     private FileChangeViewModel? _draggingFile;
-
-    // ── Terminal fields ───────────────────────────────────────────────────────
-
-    private ConPtyTerminal? _terminal;
-    private CancellationTokenSource? _terminalReadCts;
-    private Task? _readLoopTask;
-    private bool _terminalStarted;
-    private readonly StringBuilder _terminalBuffer = new();
-    private const int MaxTerminalLines = 5000;
-
-    // Regex to strip ANSI escape sequences (CSI, OSC, etc.)
-    private static readonly Regex AnsiEscapeRegex = new(
-        @"\x1B(?:\[[0-9;]*[A-Za-z]|\].*?(?:\x07|\x1B\\)|\([A-Z0-9]|[>=])",
-        RegexOptions.Compiled);
 
     public MainWindow()
     {
@@ -64,21 +43,6 @@ public partial class MainWindow : Window
                 var viewer = this.FindControl<DiffViewer>("DiffViewerControl");
                 viewer?.ScrollToDiffLine(line);
             };
-
-            vm.PropertyChanged += (_, args) =>
-            {
-                switch (args.PropertyName)
-                {
-                    case nameof(MainWindowViewModel.RepoPath):
-                        if (_terminalStarted)
-                            RestartTerminal();
-                        break;
-                    case nameof(MainWindowViewModel.IsConsoleVisible):
-                        if (vm.IsConsoleVisible && !_terminalStarted)
-                            StartTerminal();
-                        break;
-                }
-            };
         };
     }
 
@@ -86,7 +50,6 @@ public partial class MainWindow : Window
     {
         base.OnLoaded(e);
         WireFileDragDrop();
-        WireTerminalInput();
         WireKeyboardShortcuts();
         WireBlameViewer();
         WireFileTree();
@@ -134,218 +97,6 @@ public partial class MainWindow : Window
                     vm.NavigateToBlameCommit(commitHash);
             };
         }
-    }
-
-    // ── Terminal lifecycle ─────────────────────────────────────────────────────
-
-    private void WireTerminalInput()
-    {
-        var input = this.FindControl<TextBox>("TerminalInput");
-        if (input == null) return;
-
-        input.KeyDown += (_, e) =>
-        {
-            if (e.Key == Key.Enter)
-            {
-                var text = input.Text ?? string.Empty;
-                SendToTerminal(text + "\r\n");
-                input.Text = string.Empty;
-                e.Handled = true;
-            }
-            else if (e.Key == Key.C && e.KeyModifiers.HasFlag(KeyModifiers.Control))
-            {
-                // Ctrl+C sends interrupt
-                SendToTerminal("\x03");
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Up)
-            {
-                // Up arrow for command history
-                SendToTerminal("\x1B[A");
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Down)
-            {
-                SendToTerminal("\x1B[B");
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Tab)
-            {
-                // Tab completion
-                SendToTerminal("\t");
-                e.Handled = true;
-            }
-        };
-    }
-
-    private void SendToTerminal(string data)
-    {
-        var terminal = _terminal;
-        if (terminal == null) return;
-        try
-        {
-            var bytes = Encoding.UTF8.GetBytes(data);
-            terminal.Input.Write(bytes, 0, bytes.Length);
-            terminal.Input.Flush();
-        }
-        catch (ObjectDisposedException) { }
-        catch (IOException) { }
-    }
-
-    private void StartTerminal()
-    {
-        if (DataContext is not MainWindowViewModel vm || string.IsNullOrEmpty(vm.RepoPath))
-        {
-            SetTerminalStatus("Open a repository first");
-            return;
-        }
-
-        // Reject UNC paths to prevent network authentication to untrusted servers
-        if (vm.RepoPath.StartsWith(@"\\"))
-        {
-            SetTerminalStatus("UNC paths are not supported for terminal");
-            return;
-        }
-
-        if (!Path.IsPathRooted(vm.RepoPath))
-        {
-            SetTerminalStatus("Relative paths are not supported for terminal");
-            return;
-        }
-
-        StopTerminal();
-
-        try
-        {
-            SetTerminalStatus(string.Empty);
-            _terminal = new ConPtyTerminal(120, 30, vm.RepoPath, "powershell.exe -NoProfile -NoLogo");
-            _terminalStarted = true;
-            _terminalReadCts = new CancellationTokenSource();
-            StartReadLoop();
-        }
-        catch (Exception ex)
-        {
-            SetTerminalStatus($"Terminal error: {ex.Message}");
-        }
-    }
-
-    private void RestartTerminal()
-    {
-        StopTerminal();
-        _terminalStarted = false;
-        _terminalBuffer.Clear();
-        UpdateTerminalDisplay(string.Empty);
-        StartTerminal();
-    }
-
-    private void StartReadLoop()
-    {
-        var cts = _terminalReadCts;
-        var terminal = _terminal;
-        if (terminal == null || cts == null) return;
-
-        _readLoopTask = Task.Run(() =>
-        {
-            var buffer = new byte[4096];
-            try
-            {
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    int bytesRead = terminal.Output.Read(buffer, 0, buffer.Length);
-                    if (bytesRead == 0) break;
-
-                    var text = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-                    Dispatcher.UIThread.Post(() => AppendTerminalOutput(text));
-                }
-
-                if (!cts.Token.IsCancellationRequested)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                        SetTerminalStatus("Terminal process exited"));
-                }
-            }
-            catch when (cts.Token.IsCancellationRequested) { }
-            catch (IOException)
-            {
-                if (!cts.Token.IsCancellationRequested)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                        SetTerminalStatus("Terminal connection lost"));
-                }
-            }
-        });
-    }
-
-    private void AppendTerminalOutput(string text)
-    {
-        _terminalBuffer.Append(text);
-
-        // Trim to max lines to prevent unbounded memory growth
-        var content = _terminalBuffer.ToString();
-        var lines = content.Split('\n');
-        if (lines.Length > MaxTerminalLines)
-        {
-            var trimmed = string.Join('\n', lines.Skip(lines.Length - MaxTerminalLines));
-            _terminalBuffer.Clear();
-            _terminalBuffer.Append(trimmed);
-            content = trimmed;
-        }
-
-        UpdateTerminalDisplay(content);
-    }
-
-    private void UpdateTerminalDisplay(string content)
-    {
-        var outputBlock = this.FindControl<SelectableTextBlock>("TerminalOutput");
-        var scrollViewer = this.FindControl<ScrollViewer>("TerminalScrollViewer");
-
-        if (outputBlock != null)
-        {
-            outputBlock.Inlines?.Clear();
-            var runs = AnsiTextParser.Parse(content);
-            foreach (var run in runs)
-            {
-                var inline = new Avalonia.Controls.Documents.Run(run.Text)
-                {
-                    Foreground = run.Foreground,
-                    FontWeight = run.IsBold
-                        ? Avalonia.Media.FontWeight.Bold
-                        : Avalonia.Media.FontWeight.Normal
-                };
-                outputBlock.Inlines?.Add(inline);
-            }
-        }
-
-        // Auto-scroll to bottom
-        scrollViewer?.ScrollToEnd();
-    }
-
-    private void StopTerminal()
-    {
-        _terminalReadCts?.Cancel();
-
-        try { _readLoopTask?.Wait(TimeSpan.FromSeconds(1)); }
-        catch (AggregateException) { }
-        _readLoopTask = null;
-
-        _terminalReadCts?.Dispose();
-        _terminalReadCts = null;
-
-        _terminal?.Dispose();
-        _terminal = null;
-    }
-
-    private void SetTerminalStatus(string message)
-    {
-        if (DataContext is MainWindowViewModel vm)
-            vm.TerminalStatus = message;
-    }
-
-    protected override void OnClosing(WindowClosingEventArgs e)
-    {
-        StopTerminal();
-        base.OnClosing(e);
     }
 
     // ── Keyboard shortcuts ─────────────────────────────────────────────────────

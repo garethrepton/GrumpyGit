@@ -14,6 +14,13 @@ public class GitService : IGitService
     /// </summary>
     private static Command GitCmd() => GitProcess.Start();
 
+    /// <summary>
+    /// As <see cref="GitCmd"/>, plus default language diff drivers so hunk headers carry
+    /// the enclosing declaration. Used by the diff-producing commands only — see
+    /// <see cref="GitProcess.StartForDiff"/> for why it is not the default everywhere.
+    /// </summary>
+    private static Command GitDiffCmd() => GitProcess.StartForDiff();
+
     // -------------------------------------------------------------------------
     // Input validation helpers
     // -------------------------------------------------------------------------
@@ -455,7 +462,7 @@ public class GitService : IGitService
 
         // Use diff-tree -p so the initial commit (no parent) works via --root.
         // diff <hash>^ fails with exit 128 when there is no parent.
-        var result = await GitCmd()
+        var result = await GitDiffCmd()
             .WithArguments(args =>
             {
                 args
@@ -492,7 +499,7 @@ public class GitService : IGitService
         ValidateRepoPath(repoPath);
         ValidateFilePath(repoPath, filePath);
 
-        var result = await GitCmd()
+        var result = await GitDiffCmd()
             .WithArguments(args =>
             {
                 args
@@ -524,7 +531,7 @@ public class GitService : IGitService
         ValidateRepoPath(repoPath);
         ValidateFilePath(repoPath, filePath);
 
-        var result = await GitCmd()
+        var result = await GitDiffCmd()
             .WithArguments(args =>
             {
                 args

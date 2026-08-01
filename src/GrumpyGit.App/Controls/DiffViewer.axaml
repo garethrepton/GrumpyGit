@@ -4,9 +4,47 @@
              xmlns:controls="using:GrumpyGit.App.Controls"
              x:Class="GrumpyGit.App.Controls.DiffViewer">
 
+    <Panel>
+
+    <!-- ── Single-column pane: ghost view and blink comparator ──────────────────
+         Both are one editor over one document, so they share this pane and differ
+         only in what gets loaded into it. Hidden entirely in side-by-side mode. -->
+    <Grid x:Name="SingleColumnRoot"
+          RowDefinitions="Auto,*"
+          IsVisible="False"
+          Background="{DynamicResource EditorBgBrush}">
+        <Border Grid.Row="0" Classes="pane-header">
+            <StackPanel Orientation="Horizontal" Spacing="7">
+                <Border Width="7" Height="7"
+                        CornerRadius="2"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource AddFgBrush}"/>
+                <TextBlock x:Name="SingleColumnLabel" Classes="strip-label" Text="GHOST"/>
+                <TextBlock x:Name="SingleColumnHint"
+                           Classes="strip-label"
+                           Opacity="0.65"
+                           Text=""/>
+            </StackPanel>
+        </Border>
+        <aedit:TextEditor x:Name="SingleEditor"
+                          Grid.Row="1"
+                          IsReadOnly="True"
+                          ShowLineNumbers="True"
+                          FontFamily="{DynamicResource MonoFontFamily}"
+                          FontSize="{DynamicResource FontSizeCode}"
+                          WordWrap="False"
+                          Background="{DynamicResource EditorBgBrush}"
+                          Foreground="{DynamicResource TextPrimaryBrush}"
+                          LineNumbersForeground="{DynamicResource GutterFgBrush}"
+                          BorderThickness="0"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"/>
+    </Grid>
+
     <!-- Editors, then a fixed-width minimap strip showing where every change sits
          in the whole file — essential once full-file mode makes the document long. -->
-    <Grid ColumnDefinitions="*,1,*,Auto" Background="{DynamicResource EditorBgBrush}">
+    <Grid x:Name="SideBySideRoot"
+          ColumnDefinitions="*,1,*,Auto" Background="{DynamicResource EditorBgBrush}">
 
         <!-- Left side: old / removed -->
         <Grid Grid.Column="0" RowDefinitions="Auto,*">
@@ -78,4 +116,6 @@
         </Grid>
 
     </Grid>
+
+    </Panel>
 </UserControl>

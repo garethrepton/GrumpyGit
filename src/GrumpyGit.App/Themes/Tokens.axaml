@@ -110,6 +110,17 @@
             <SolidColorBrush x:Key="DiffDelWordBrush"   Color="#66FA6D64"/>
             <SolidColorBrush x:Key="DiffHunkLineBrush"  Color="#245FA9FF"/>
 
+            <!-- Ghost view: removed lines kept in place. Deliberately fainter than a
+                 normal deletion tint and paired with struck-through, dimmed text — the
+                 ghost is context for the line below it, not the thing being read. -->
+            <SolidColorBrush x:Key="DiffGhostLineBrush" Color="#1CFA6D64"/>
+            <SolidColorBrush x:Key="DiffGhostFgBrush"   Color="#6E7684"/>
+
+            <!-- Moved blocks: a third colour so a move reads as neither an addition nor
+                 a deletion, which is exactly what it is. -->
+            <SolidColorBrush x:Key="DiffMovedLineBrush" Color="#2E7C5CFF"/>
+            <SolidColorBrush x:Key="DiffMovedFgBrush"   Color="#9B8CFF"/>
+
             <!-- Diff gutter / editor chrome -->
             <SolidColorBrush x:Key="EditorBgBrush"      Color="#0F1219"/>
             <SolidColorBrush x:Key="GutterBgBrush"      Color="#0B0D12"/>
@@ -118,6 +129,33 @@
 
             <!-- Translucent accent band shown while a splitter is grabbable -->
             <SolidColorBrush x:Key="SplitterHoverBrush" Color="#557B68F0"/>
+
+            <!-- Terminal chrome + the 16 ANSI slots.
+                 The shell only ever names a slot ("red"), never a pixel value, so the
+                 palette has to be a theme token like everything else — the same output
+                 has to stay legible on both a near-black and a white background. Hues are
+                 pulled toward the semantic tokens above so a red in the terminal reads as
+                 the same red as a deletion elsewhere in the app. -->
+            <SolidColorBrush x:Key="TerminalBgBrush"     Color="#0B0D12"/>
+            <SolidColorBrush x:Key="TerminalFgBrush"     Color="#C9D3E3"/>
+            <SolidColorBrush x:Key="TerminalCursorBrush" Color="#7B68F0"/>
+
+            <SolidColorBrush x:Key="AnsiBlackBrush"         Color="#2B3444"/>
+            <SolidColorBrush x:Key="AnsiRedBrush"           Color="#FA6D64"/>
+            <SolidColorBrush x:Key="AnsiGreenBrush"         Color="#4FC463"/>
+            <SolidColorBrush x:Key="AnsiYellowBrush"        Color="#D8A32C"/>
+            <SolidColorBrush x:Key="AnsiBlueBrush"          Color="#5FA9FF"/>
+            <SolidColorBrush x:Key="AnsiMagentaBrush"       Color="#B49BFF"/>
+            <SolidColorBrush x:Key="AnsiCyanBrush"          Color="#56D4DD"/>
+            <SolidColorBrush x:Key="AnsiWhiteBrush"         Color="#A2ACC0"/>
+            <SolidColorBrush x:Key="AnsiBrightBlackBrush"   Color="#6C7789"/>
+            <SolidColorBrush x:Key="AnsiBrightRedBrush"     Color="#FF8F87"/>
+            <SolidColorBrush x:Key="AnsiBrightGreenBrush"   Color="#6FE082"/>
+            <SolidColorBrush x:Key="AnsiBrightYellowBrush"  Color="#F0C04A"/>
+            <SolidColorBrush x:Key="AnsiBrightBlueBrush"    Color="#86C1FF"/>
+            <SolidColorBrush x:Key="AnsiBrightMagentaBrush" Color="#CDBBFF"/>
+            <SolidColorBrush x:Key="AnsiBrightCyanBrush"    Color="#7FE9F0"/>
+            <SolidColorBrush x:Key="AnsiBrightWhiteBrush"   Color="#E7ECF5"/>
         </ResourceDictionary>
 
         <!-- ───────────────────────────── LIGHT ───────────────────────────── -->
@@ -203,12 +241,41 @@
             <SolidColorBrush x:Key="DiffDelWordBrush"   Color="#4DC93C37"/>
             <SolidColorBrush x:Key="DiffHunkLineBrush"  Color="#1F0969DA"/>
 
+            <SolidColorBrush x:Key="DiffGhostLineBrush" Color="#1AC93C37"/>
+            <SolidColorBrush x:Key="DiffGhostFgBrush"   Color="#8B94A3"/>
+            <SolidColorBrush x:Key="DiffMovedLineBrush" Color="#245A3FCC"/>
+            <SolidColorBrush x:Key="DiffMovedFgBrush"   Color="#5A3FCC"/>
+
             <SolidColorBrush x:Key="EditorBgBrush"      Color="#FFFFFF"/>
             <SolidColorBrush x:Key="GutterBgBrush"      Color="#F8F9FC"/>
             <SolidColorBrush x:Key="GutterFgBrush"      Color="#8B94A3"/>
             <SolidColorBrush x:Key="CurrentLineBrush"   Color="#F2F4F8"/>
 
             <SolidColorBrush x:Key="SplitterHoverBrush" Color="#4D5B48D6"/>
+
+            <!-- Terminal chrome + the 16 ANSI slots. The "bright" half goes *darker* than
+                 the base half here, not lighter: brightness in a palette means "stands out
+                 from the background", and on white that is more saturation, not more light. -->
+            <SolidColorBrush x:Key="TerminalBgBrush"     Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="TerminalFgBrush"     Color="#24292F"/>
+            <SolidColorBrush x:Key="TerminalCursorBrush" Color="#5B48D6"/>
+
+            <SolidColorBrush x:Key="AnsiBlackBrush"         Color="#141822"/>
+            <SolidColorBrush x:Key="AnsiRedBrush"           Color="#C93C37"/>
+            <SolidColorBrush x:Key="AnsiGreenBrush"         Color="#1A7F37"/>
+            <SolidColorBrush x:Key="AnsiYellowBrush"        Color="#9A6700"/>
+            <SolidColorBrush x:Key="AnsiBlueBrush"          Color="#0969DA"/>
+            <SolidColorBrush x:Key="AnsiMagentaBrush"       Color="#8250DF"/>
+            <SolidColorBrush x:Key="AnsiCyanBrush"          Color="#00707B"/>
+            <SolidColorBrush x:Key="AnsiWhiteBrush"         Color="#727D8F"/>
+            <SolidColorBrush x:Key="AnsiBrightBlackBrush"   Color="#4B5565"/>
+            <SolidColorBrush x:Key="AnsiBrightRedBrush"     Color="#A3241F"/>
+            <SolidColorBrush x:Key="AnsiBrightGreenBrush"   Color="#116329"/>
+            <SolidColorBrush x:Key="AnsiBrightYellowBrush"  Color="#7A4E00"/>
+            <SolidColorBrush x:Key="AnsiBrightBlueBrush"    Color="#0550AE"/>
+            <SolidColorBrush x:Key="AnsiBrightMagentaBrush" Color="#6639BA"/>
+            <SolidColorBrush x:Key="AnsiBrightCyanBrush"    Color="#00565E"/>
+            <SolidColorBrush x:Key="AnsiBrightWhiteBrush"   Color="#24292F"/>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 

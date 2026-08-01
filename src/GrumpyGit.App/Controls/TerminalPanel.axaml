@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GrumpyGit.App.ViewModels"
+             x:Class="GrumpyGit.App.Controls.TerminalPanel"
+             x:DataType="vm:MainWindowViewModel">
+
+    <!-- The scrollback itself is drawn by TerminalOutputView, which is created in
+         code-behind and dropped into OutputScroller. It is a custom-drawn control with no
+         templatable surface, so there is nothing for XAML to describe. -->
+
+    <Border Background="{DynamicResource TerminalBgBrush}"
+            BorderBrush="{DynamicResource BorderDefaultBrush}"
+            BorderThickness="0,1,0,0">
+        <Grid RowDefinitions="Auto,*">
+
+            <!-- Header: identity on the left, live status in the middle, actions right -->
+            <Border Grid.Row="0" Classes="pane-header">
+                <DockPanel LastChildFill="True">
+
+                    <StackPanel DockPanel.Dock="Left"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                VerticalAlignment="Center">
+                        <Path Classes="icon sm" Data="{DynamicResource IconTerminal}"/>
+                        <TextBlock Classes="strip-label" Text="TERMINAL"/>
+                        <TextBlock Classes="caption"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding TerminalRepoLabel}"
+                                   ToolTip.Tip="{Binding TerminalCwdLabel}"/>
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Right"
+                                Orientation="Horizontal"
+                                Spacing="2"
+                                VerticalAlignment="Center">
+                        <Button Classes="subtle icon-only sm"
+                                Command="{Binding InterruptTerminalCommand}"
+                                ToolTip.Tip="Interrupt running command (Ctrl+C)">
+                            <Path Classes="icon sm" Data="{DynamicResource IconXCircle}"/>
+                        </Button>
+                        <Button Classes="subtle icon-only sm"
+                                Command="{Binding CopyTerminalCommand}"
+                                ToolTip.Tip="Copy all output (Ctrl+Shift+C)">
+                            <Path Classes="icon sm" Data="{DynamicResource IconCopy}"/>
+                        </Button>
+                        <Button Classes="subtle icon-only sm"
+                                Command="{Binding ClearTerminalCommand}"
+                                ToolTip.Tip="Clear scrollback (Ctrl+L)">
+                            <Path Classes="icon sm" Data="{DynamicResource IconTrash}"/>
+                        </Button>
+                        <Button Classes="subtle icon-only sm"
+                                Command="{Binding RestartTerminalCommand}"
+                                ToolTip.Tip="Restart shell">
+                            <Path Classes="icon sm" Data="{DynamicResource IconFetch}"/>
+                        </Button>
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding TerminalStatus}"
+                               Foreground="{DynamicResource DangerFgBrush}"
+                               FontSize="{DynamicResource FontSizeLabel}"
+                               FontFamily="{DynamicResource MonoFontFamily}"
+                               VerticalAlignment="Center"
+                               Margin="12,0,8,0"
+                               TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding TerminalStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                </DockPanel>
+            </Border>
+
+            <ScrollViewer Grid.Row="1"
+                          x:Name="OutputScroller"
+                          Padding="10,6"
+                          Background="Transparent"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Auto"/>
+        </Grid>
+    </Border>
+</UserControl>

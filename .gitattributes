@@ -1,0 +1,15 @@
+# Language diff drivers.
+#
+# These put the enclosing declaration on every hunk header —
+#   @@ -154,6 +154,10 @@ private void OnLoaded(...)
+# instead of the bare line range — which is what the "Changed symbols" summary reads to
+# attribute a hunk to a function. They also make `git diff` on the command line far more
+# readable, so this is worth having regardless of the app.
+#
+# Every driver named here is one of git's built-ins: a bundled regex, not an external
+# command.
+*.cs     diff=csharp
+*.csx    diff=csharp
+*.md     diff=markdown
+*.css    diff=css
+*.html   diff=html
