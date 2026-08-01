@@ -7,6 +7,13 @@ A fast, keyboard-friendly visual Git client for Windows built with .NET 9 and Av
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 ![.NET](https://img.shields.io/badge/.NET-9.0-purple)
+[![Latest release](https://img.shields.io/github/v/release/garethrepton/GrumpyGit?label=latest%20release)](https://github.com/garethrepton/GrumpyGit/releases/latest)
+
+## Download
+
+**[⬇ Download the latest installer](https://github.com/garethrepton/GrumpyGit/releases/latest)** — `Grumpy-<version>-win-x64-setup.exe`
+
+Installs per-user under `%LOCALAPPDATA%\Programs\Grumpy`, so it needs no administrator rights and raises no UAC prompt. The build is self-contained — no .NET runtime install required. Uninstall from **Apps & features** like any other app.
 
 ## Features
 

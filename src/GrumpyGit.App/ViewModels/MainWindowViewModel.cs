@@ -88,6 +88,24 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _newTagMessage = string.Empty;
     [ObservableProperty] private string? _tagTargetCommit;
 
+    // The create-tag editor shares the branch bar, so opening it has to re-raise
+    // that bar's visibility the same way the branch and merge panels do.
+    partial void OnIsCreatingTagChanged(bool value)
+        => OnPropertyChanged(nameof(IsBranchBarVisible));
+
+    /// <summary>
+    /// Which commit the pending tag lands on. The menu item says "here", so the
+    /// editor has to name the commit — otherwise the target is invisible once the
+    /// context menu closes. Empty target means HEAD, which is what git defaults to.
+    /// </summary>
+    public string TagTargetLabel =>
+        string.IsNullOrEmpty(TagTargetCommit)
+            ? "HEAD"
+            : (TagTargetCommit.Length > 7 ? TagTargetCommit[..7] : TagTargetCommit);
+
+    partial void OnTagTargetCommitChanged(string? value)
+        => OnPropertyChanged(nameof(TagTargetLabel));
+
     // ── Settings ────────────────────────────────────────────────────────────────
 
     [ObservableProperty] private bool _isSettingsVisible;
@@ -777,7 +795,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public IReadOnlyList<string> MergeBranches =>
         Branches.Where(b => b != CurrentBranch).ToList();
 
-    public bool IsBranchBarVisible => IsCreatingBranch || IsMerging;
+    public bool IsBranchBarVisible => IsCreatingBranch || IsMerging || IsCreatingTag;
 
     [RelayCommand]
     private void StartMerge()

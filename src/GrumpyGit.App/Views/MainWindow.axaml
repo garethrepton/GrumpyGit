@@ -393,6 +393,31 @@
                             Command="{Binding CancelMergeCommand}"/>
                 </StackPanel>
 
+                <!-- Create-tag sub-panel. An empty message creates a lightweight
+                     tag; typing one makes it annotated (git tag -a). -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            IsVisible="{Binding IsCreatingTag}">
+                    <Path Classes="icon" Data="{DynamicResource IconTag}"/>
+                    <TextBlock Text="{Binding TagTargetLabel, StringFormat='New tag at {0}'}"
+                               Classes="secondary"
+                               VerticalAlignment="Center"/>
+                    <TextBox Classes="branch-input"
+                             Text="{Binding NewTagName, Mode=TwoWay}"
+                             Watermark="v1.0.0"
+                             Width="160"/>
+                    <TextBox Classes="branch-input"
+                             Text="{Binding NewTagMessage, Mode=TwoWay}"
+                             Watermark="Message (optional — annotated tag)"
+                             Width="280"/>
+                    <Button Classes="primary"
+                            Content="Create Tag"
+                            Command="{Binding ConfirmCreateTagCommand}"/>
+                    <Button Classes="subtle"
+                            Content="Cancel"
+                            Command="{Binding CancelCreateTagCommand}"/>
+                </StackPanel>
+
             </StackPanel>
         </Border>
 
