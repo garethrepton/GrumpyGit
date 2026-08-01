@@ -1235,10 +1235,19 @@ public partial class MainWindowViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(NewTagName) || string.IsNullOrEmpty(RepoPath)) return;
         try
         {
-            var message = string.IsNullOrWhiteSpace(NewTagMessage) ? null : NewTagMessage;
-            await _git.CreateTagAsync(RepoPath, NewTagName.Trim(), message, TagTargetCommit);
+            var name = NewTagName.Trim();
+
+            // Always annotated, falling back to the tag's own name when no message is
+            // given. An empty message used to produce a LIGHTWEIGHT tag, and
+            // `git push --follow-tags` — what the Push button runs — deliberately ignores
+            // those. The tag was created, Push reported success, and the tag silently
+            // stayed local; for a tag-triggered release that means no build ever runs.
+            // Defaulting the message is what makes "create a tag, press Push" work.
+            var message = string.IsNullOrWhiteSpace(NewTagMessage) ? name : NewTagMessage;
+
+            await _git.CreateTagAsync(RepoPath, name, message, TagTargetCommit);
             IsCreatingTag = false;
-            ShowToast($"Tag '{NewTagName.Trim()}' created", ToastSeverity.Success);
+            ShowToast($"Tag '{name}' created — press Push to publish it", ToastSeverity.Success);
             await LoadTagsAsync();
         }
         catch (Exception ex)

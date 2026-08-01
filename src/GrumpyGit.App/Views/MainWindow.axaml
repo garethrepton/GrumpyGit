@@ -411,7 +411,7 @@
                              Width="160"/>
                     <TextBox Classes="branch-input"
                              Text="{Binding NewTagMessage, Mode=TwoWay}"
-                             Watermark="Message (optional — annotated tag)"
+                             Watermark="Message (optional — defaults to the tag name)"
                              Width="280"/>
                     <Button Classes="primary"
                             Content="Create Tag"
