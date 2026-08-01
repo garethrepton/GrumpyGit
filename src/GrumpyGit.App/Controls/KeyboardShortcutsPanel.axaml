@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GrumpyGit.App.Controls.KeyboardShortcutsPanel">
+
+    <UserControl.Styles>
+        <!-- One rule for every shortcut row, rather than repeating the same
+             four attributes on 20 pairs of TextBlocks. -->
+        <!-- ColumnDefinitions is a CLR property, not an AvaloniaProperty, so it
+             cannot be set from a Style; it stays on each Grid. -->
+        <Style Selector="Grid.shortcut">
+            <Setter Property="Margin" Value="0,1"/>
+        </Style>
+        <Style Selector="Grid.shortcut > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="StackPanel.group">
+            <Setter Property="Spacing" Value="5"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Border Classes="card"
+            Padding="{DynamicResource PadDialog}"
+            MaxWidth="580"
+            MaxHeight="560"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center">
+        <Grid RowDefinitions="Auto,*,Auto">
+            <TextBlock Grid.Row="0"
+                       Classes="title"
+                       Text="Keyboard Shortcuts"
+                       Margin="0,0,0,18"/>
+
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          MaxHeight="400">
+                <StackPanel Spacing="20">
+
+                    <!-- Global -->
+                    <StackPanel Classes="group">
+                        <TextBlock Classes="strip-label" Text="GLOBAL"/>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+O"/></Border>
+                            <TextBlock Grid.Column="1" Text="Open repository"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+G"/></Border>
+                            <TextBlock Grid.Column="1" Text="Toggle commit graph"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+`"/></Border>
+                            <TextBlock Grid.Column="1" Text="Toggle terminal"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+/"/></Border>
+                            <TextBlock Grid.Column="1" Text="Show keyboard shortcuts"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+F"/></Border>
+                            <TextBlock Grid.Column="1" Text="Search commits"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+,"/></Border>
+                            <TextBlock Grid.Column="1" Text="Open settings"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+Tab"/></Border>
+                            <TextBlock Grid.Column="1" Text="Next repository tab"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Staging -->
+                    <StackPanel Classes="group">
+                        <TextBlock Classes="strip-label" Text="STAGING"/>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+Enter"/></Border>
+                            <TextBlock Grid.Column="1" Text="Commit staged changes"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+Shift+A"/></Border>
+                            <TextBlock Grid.Column="1" Text="Stage all files"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Diff Viewer -->
+                    <StackPanel Classes="group">
+                        <TextBlock Classes="strip-label" Text="DIFF VIEWER"/>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+Shift+S"/></Border>
+                            <TextBlock Grid.Column="1" Text="Stage selected lines"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+Shift+U"/></Border>
+                            <TextBlock Grid.Column="1" Text="Unstage selected lines"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Git Operations -->
+                    <StackPanel Classes="group">
+                        <TextBlock Classes="strip-label" Text="GIT OPERATIONS"/>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+Shift+P"/></Border>
+                            <TextBlock Grid.Column="1" Text="Push"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+Shift+L"/></Border>
+                            <TextBlock Grid.Column="1" Text="Pull"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+Shift+B"/></Border>
+                            <TextBlock Grid.Column="1" Text="New branch"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+Shift+T"/></Border>
+                            <TextBlock Grid.Column="1" Text="Create tag"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Terminal -->
+                    <StackPanel Classes="group">
+                        <TextBlock Classes="strip-label" Text="TERMINAL"/>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Ctrl+C"/></Border>
+                            <TextBlock Grid.Column="1" Text="Send interrupt (SIGINT)"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="Tab"/></Border>
+                            <TextBlock Grid.Column="1" Text="Tab completion"/>
+                        </Grid>
+                        <Grid Classes="shortcut" ColumnDefinitions="150,*">
+                            <Border Classes="kbd"><TextBlock Text="↑ / ↓"/></Border>
+                            <TextBlock Grid.Column="1" Text="Command history"/>
+                        </Grid>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <Button Grid.Row="2"
+                    Classes="primary"
+                    Content="Close"
+                    HorizontalAlignment="Right"
+                    Margin="0,18,0,0"
+                    Click="OnCloseClick"/>
+        </Grid>
+    </Border>
+</UserControl>

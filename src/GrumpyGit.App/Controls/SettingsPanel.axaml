@@ -1,0 +1,122 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GrumpyGit.App.ViewModels"
+             x:Class="GrumpyGit.App.Controls.SettingsPanel"
+             x:DataType="vm:MainWindowViewModel">
+
+    <UserControl.Styles>
+        <!-- Every field is a 130px label beside a stretched input, so the whole
+             form shares one baseline grid instead of each row inventing one. -->
+        <Style Selector="Grid.field > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Border Classes="card"
+            Padding="{DynamicResource PadDialog}"
+            MaxWidth="520"
+            MaxHeight="560"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center">
+        <Grid RowDefinitions="Auto,*,Auto">
+
+            <!-- Header -->
+            <TextBlock Grid.Row="0"
+                       Classes="title"
+                       Text="Settings"
+                       Margin="0,0,0,18"/>
+
+            <!-- Settings form -->
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          MaxHeight="400">
+                <StackPanel Spacing="18">
+
+                    <!-- Git Identity -->
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="strip-label" Text="GIT IDENTITY"/>
+
+                        <Grid Classes="field" ColumnDefinitions="130,*" Margin="0,4,0,0">
+                            <TextBlock Grid.Column="0" Text="user.name"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding SettingsGitUserName, Mode=TwoWay}"/>
+                        </Grid>
+
+                        <Grid Classes="field" ColumnDefinitions="130,*">
+                            <TextBlock Grid.Column="0" Text="user.email"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding SettingsGitUserEmail, Mode=TwoWay}"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Repository -->
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="strip-label" Text="REPOSITORY"/>
+
+                        <Grid Classes="field" ColumnDefinitions="130,*" Margin="0,4,0,0">
+                            <TextBlock Grid.Column="0" Text="Default remote"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding SettingsDefaultRemote, Mode=TwoWay}"/>
+                        </Grid>
+
+                        <Grid Classes="field" ColumnDefinitions="130,*">
+                            <TextBlock Grid.Column="0" Text="Auto-fetch (sec)"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding SettingsAutoFetchInterval, Mode=TwoWay}"
+                                     Watermark="0 = disabled"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Editor -->
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="strip-label" Text="EDITOR"/>
+
+                        <Grid Classes="field" ColumnDefinitions="130,*" Margin="0,4,0,0">
+                            <TextBlock Grid.Column="0" Text="Font size"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding SettingsTerminalFontSize, Mode=TwoWay}"/>
+                        </Grid>
+
+                        <Grid Classes="field" ColumnDefinitions="130,*">
+                            <TextBlock Grid.Column="0" Text="Diff context lines"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding SettingsDiffContextLines, Mode=TwoWay}"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Appearance -->
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="strip-label" Text="APPEARANCE"/>
+
+                        <Grid Classes="field" ColumnDefinitions="130,*" Margin="0,4,0,0">
+                            <TextBlock Grid.Column="0" Text="Theme"/>
+                            <ComboBox Grid.Column="1"
+                                      SelectedItem="{Binding SettingsTheme, Mode=TwoWay}"
+                                      HorizontalAlignment="Left"
+                                      MinWidth="140">
+                                <x:String>Dark</x:String>
+                                <x:String>Light</x:String>
+                            </ComboBox>
+                        </Grid>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="2"
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        HorizontalAlignment="Right"
+                        Margin="0,18,0,0">
+                <Button Classes="subtle"
+                        Content="Cancel"
+                        Command="{Binding CancelSettingsCommand}"/>
+                <Button Classes="primary"
+                        Content="Save"
+                        Command="{Binding SaveSettingsCommand}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

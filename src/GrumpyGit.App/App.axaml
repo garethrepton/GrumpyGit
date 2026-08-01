@@ -1,0 +1,28 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GrumpyGit.App.App"
+             xmlns:local="using:GrumpyGit.App"
+             RequestedThemeVariant="Dark">
+             <!-- Tokens.axaml supplies both Dark and Light theme dictionaries, but the
+                  views still carry dark-only literals until the token migration finishes.
+                  Pinned to Dark so the app is internally consistent in the meantime. -->
+
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://GrumpyGit.App/Themes/Tokens.axaml"/>
+                <ResourceInclude Source="avares://GrumpyGit.App/Themes/Icons.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"/>
+        <StyleInclude Source="avares://GrumpyGit.App/Themes/Controls.axaml"/>
+    </Application.Styles>
+</Application>

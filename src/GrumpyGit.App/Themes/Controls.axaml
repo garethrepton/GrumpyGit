@@ -1,0 +1,649 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         GrumpyGit control styles.
+
+         Everything here resolves colour through Themes/Tokens.axaml via
+         DynamicResource so the whole app follows the theme variant. Add new
+         visual treatments as style *classes* rather than inline attributes.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- ── Window / global typography ─────────────────────────────────────── -->
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{DynamicResource BgBaseBrush}"/>
+        <Setter Property="FontFamily" Value="avares://Avalonia.Fonts.Inter/Assets#Inter"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+
+    <Style Selector="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+    </Style>
+
+    <!-- ── TextBlock semantic classes ─────────────────────────────────────── -->
+
+    <!-- Uppercase section label above a panel: "BRANCHES", "FILES" -->
+    <Style Selector="TextBlock.panel-header">
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMicro}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="LetterSpacing" Value="0.9"/>
+        <Setter Property="Margin" Value="12,10,12,6"/>
+    </Style>
+
+    <Style Selector="TextBlock.title">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeTitle}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style Selector="TextBlock.subtitle">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSubtitle}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style Selector="TextBlock.secondary">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    </Style>
+
+    <Style Selector="TextBlock.tertiary">
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}"/>
+    </Style>
+
+    <Style Selector="TextBlock.caption">
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeLabel}"/>
+    </Style>
+
+    <Style Selector="TextBlock.mono">
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFontFamily}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCode}"/>
+    </Style>
+
+    <!-- Short SHA — monospace, tinted, slightly tighter -->
+    <Style Selector="TextBlock.sha">
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFontFamily}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeLabel}"/>
+        <Setter Property="Foreground" Value="{DynamicResource InfoFgBrush}"/>
+    </Style>
+
+    <!-- ── Icons ──────────────────────────────────────────────────────────── -->
+    <Style Selector="Path.icon">
+        <Setter Property="Fill" Value="{x:Null}"/>
+        <Setter Property="Stroke" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="StrokeThickness" Value="1.75"/>
+        <Setter Property="StrokeLineCap" Value="Round"/>
+        <Setter Property="StrokeJoin" Value="Round"/>
+        <Setter Property="Width" Value="15"/>
+        <Setter Property="Height" Value="15"/>
+        <Setter Property="Stretch" Value="Uniform"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="Path.icon.sm">
+        <Setter Property="Width" Value="12"/>
+        <Setter Property="Height" Value="12"/>
+        <Setter Property="StrokeThickness" Value="2"/>
+    </Style>
+
+    <Style Selector="Path.icon.lg">
+        <Setter Property="Width" Value="20"/>
+        <Setter Property="Height" Value="20"/>
+        <Setter Property="StrokeThickness" Value="1.6"/>
+    </Style>
+
+    <Style Selector="Path.icon.accent">
+        <Setter Property="Stroke" Value="{DynamicResource AccentTextBrush}"/>
+    </Style>
+    <Style Selector="Path.icon.ai">
+        <Setter Property="Stroke" Value="{DynamicResource AiFgBrush}"/>
+    </Style>
+    <Style Selector="Path.icon.danger">
+        <Setter Property="Stroke" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+    <Style Selector="Path.icon.success">
+        <Setter Property="Stroke" Value="{DynamicResource AddFgBrush}"/>
+    </Style>
+    <Style Selector="Path.icon.warn">
+        <Setter Property="Stroke" Value="{DynamicResource WarnFgBrush}"/>
+    </Style>
+
+    <!-- Icons dim in step with their parent button being disabled -->
+    <Style Selector="Button:disabled Path.icon">
+        <Setter Property="Stroke" Value="{DynamicResource TextDisabledBrush}"/>
+    </Style>
+
+    <!-- ══════════════════════════ Buttons ═══════════════════════════════════
+         Variants:
+           (none)        quiet/ghost — the default for toolbars
+           .primary      accent-filled, for the single main action in a view
+           .danger       destructive confirmation
+           .subtle       flat, borderless, for inline row actions
+           .icon-only    square, centres a Path.icon
+         Modifier: .sm for compact rows.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <Style Selector="Button">
+        <Setter Property="Background" Value="{DynamicResource BgRaisedBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="{DynamicResource PadControl}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12"/>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.12"/>
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+
+    <Style Selector="Button:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource BgActiveBrush}"/>
+    </Style>
+
+    <Style Selector="Button:disabled /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource BgSurfaceBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource TextDisabledBrush}"/>
+    </Style>
+
+    <!-- Primary -->
+    <Style Selector="Button.primary">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+        <Setter Property="Foreground" Value="#FFFFFF"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.primary /template/ ContentPresenter">
+        <Setter Property="TextBlock.Foreground" Value="#FFFFFF"/>
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentHoverBrush}"/>
+        <Setter Property="TextBlock.Foreground" Value="#FFFFFF"/>
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+    </Style>
+    <!-- A button whose content is a StackPanel (icon + label) hosts real
+         TextBlock/Path children, which the bare `TextBlock` and `Path.icon`
+         rules would otherwise colour for a *quiet* surface. On a filled button
+         they must invert. Declared after those rules so they win. -->
+    <Style Selector="Button.primary TextBlock">
+        <Setter Property="Foreground" Value="#FFFFFF"/>
+    </Style>
+    <Style Selector="Button.primary Path.icon">
+        <Setter Property="Stroke" Value="#FFFFFF"/>
+    </Style>
+
+    <!-- Danger -->
+    <Style Selector="Button.danger">
+        <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+    <Style Selector="Button.danger /template/ ContentPresenter">
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource DeleteBgStrongBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource DeleteFgBrush}"/>
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource DeleteFgBrush}"/>
+    </Style>
+    <Style Selector="Button.danger TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+    <Style Selector="Button.danger Path.icon">
+        <Setter Property="Stroke" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+
+    <!-- Subtle / inline -->
+    <Style Selector="Button.subtle">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="Padding" Value="{DynamicResource PadTight}"/>
+    </Style>
+    <Style Selector="Button.subtle /template/ ContentPresenter">
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    </Style>
+    <Style Selector="Button.subtle:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+
+    <!-- Icon-only square -->
+    <Style Selector="Button.icon-only">
+        <Setter Property="Padding" Value="6"/>
+        <Setter Property="MinWidth" Value="0"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.icon-only:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+    </Style>
+
+    <!-- Compact modifier -->
+    <Style Selector="Button.sm">
+        <Setter Property="Padding" Value="{DynamicResource PadTight}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeLabel}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}"/>
+    </Style>
+
+    <!-- Toggle state: a toolbar button whose panel is currently open -->
+    <Style Selector="Button.active">
+        <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
+    </Style>
+    <Style Selector="Button.active /template/ ContentPresenter">
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource AccentTextBrush}"/>
+    </Style>
+    <Style Selector="Button.active Path.icon">
+        <Setter Property="Stroke" Value="{DynamicResource AccentTextBrush}"/>
+    </Style>
+
+    <!-- ── Text inputs ────────────────────────────────────────────────────── -->
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{DynamicResource BgSunkenBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}"/>
+        <Setter Property="Padding" Value="9,6"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+        <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource AccentTextBrush}"/>
+    </Style>
+    <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource BgSunkenBrush}"/>
+    </Style>
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource BgSunkenBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="TextBox.mono">
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFontFamily}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCode}"/>
+    </Style>
+
+    <!-- ── ComboBox ───────────────────────────────────────────────────────── -->
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource BgRaisedBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}"/>
+        <Setter Property="Padding" Value="10,5"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+        <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <Style Selector="ComboBox:pointerover /template/ Border#Background">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+    </Style>
+
+    <!-- ── Lists ──────────────────────────────────────────────────────────── -->
+    <Style Selector="ListBox">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="4,2"/>
+    </Style>
+
+    <Style Selector="ListBoxItem">
+        <Setter Property="Padding" Value="8,5"/>
+        <Setter Property="Margin" Value="2,1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+        <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <!-- Hover/selection eases rather than snapping. Background only — never
+         animate layout properties here, these rows are virtualised. -->
+    <Style Selector="ListBoxItem /template/ ContentPresenter">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.13"/>
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource BgSelectedBrush}"/>
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource BgSelectedBrush}"/>
+    </Style>
+
+    <!-- Dense list rows: commit log, file lists -->
+    <Style Selector="ListBox.dense ListBoxItem">
+        <Setter Property="Padding" Value="8,3"/>
+        <Setter Property="Margin" Value="2,0"/>
+    </Style>
+
+    <!-- ── Splitters ──────────────────────────────────────────────────────── -->
+    <Style Selector="GridSplitter">
+        <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="GridSplitter:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+    </Style>
+
+    <!-- ── Scrollbars — thin and unobtrusive ──────────────────────────────── -->
+    <Style Selector="ScrollBar">
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+    </Style>
+    <Style Selector="ScrollBar:pointerover /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource TextTertiaryBrush}"/>
+    </Style>
+
+    <!-- ── Menus ──────────────────────────────────────────────────────────── -->
+    <Style Selector="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource BgOverlayBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}"/>
+        <Setter Property="Padding" Value="4"/>
+    </Style>
+    <Style Selector="MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}"/>
+    </Style>
+
+    <!-- ── ToolTips ───────────────────────────────────────────────────────── -->
+    <Style Selector="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource BgOverlayBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeLabel}"/>
+        <Setter Property="Padding" Value="9,6"/>
+        <Setter Property="MaxWidth" Value="360"/>
+    </Style>
+
+    <!-- ══════════════════════════ Border classes ════════════════════════════ -->
+
+    <!-- Chrome strips: toolbar, status bar, tab bar -->
+    <Style Selector="Border.chrome">
+        <Setter Property="Background" Value="{DynamicResource BgRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+    </Style>
+
+    <!-- A content panel in the main grid -->
+    <Style Selector="Border.panel">
+        <Setter Property="Background" Value="{DynamicResource BgSurfaceBrush}"/>
+    </Style>
+
+    <!-- Floating card: dialogs, overlays, popovers -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource BgOverlayBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusXl}"/>
+        <Setter Property="BoxShadow" Value="0 18 48 -12 #CC000000"/>
+    </Style>
+
+    <!-- Full-window dimming layer behind a modal -->
+    <Style Selector="Border.scrim">
+        <Setter Property="Background" Value="{DynamicResource ScrimBrush}"/>
+    </Style>
+
+    <!-- Inline pill label -->
+    <Style Selector="Border.badge">
+        <Setter Property="Background" Value="{DynamicResource BgActiveBrush}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="Padding" Value="7,1"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Border.badge > TextBlock">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMicro}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    </Style>
+
+    <Style Selector="Border.badge.ai">
+        <Setter Property="Background" Value="{DynamicResource AiBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AiBorderBrush}"/>
+    </Style>
+    <!-- Descendant (not child) selector: the AI badge wraps its glyph and label
+         in a StackPanel, so the label is a grandchild of the badge border. -->
+    <Style Selector="Border.badge.ai TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AiFgBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMicro}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style Selector="Border.badge.accent">
+        <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}"/>
+    </Style>
+    <Style Selector="Border.badge.accent > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
+    </Style>
+
+    <Style Selector="Border.badge.success">
+        <Setter Property="Background" Value="{DynamicResource AddBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AddBorderBrush}"/>
+    </Style>
+    <Style Selector="Border.badge.success > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AddFgBrush}"/>
+    </Style>
+
+    <Style Selector="Border.badge.warn">
+        <Setter Property="Background" Value="{DynamicResource WarnBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource WarnBorderBrush}"/>
+    </Style>
+    <Style Selector="Border.badge.warn > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource WarnFgBrush}"/>
+    </Style>
+
+    <Style Selector="Border.badge.danger">
+        <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+    </Style>
+    <Style Selector="Border.badge.danger > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+
+    <!-- Thin vertical rule separating toolbar groups -->
+    <Style Selector="Border.divider">
+        <Setter Property="Background" Value="{DynamicResource BorderDefaultBrush}"/>
+        <Setter Property="Width" Value="1"/>
+        <Setter Property="Margin" Value="5,4"/>
+    </Style>
+
+    <!-- ══════════════════════════ Pane chrome ═══════════════════════════════
+         A "strip header" is the thin labelled bar above a pane: BEFORE, AFTER,
+         BLAME, CONTENT, STAGED, DIFF. One treatment, used everywhere, so the
+         panes read as a set rather than as separately-decorated boxes.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <Style Selector="Border.pane-header">
+        <Setter Property="Background" Value="{DynamicResource BgRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="Padding" Value="12,7"/>
+    </Style>
+
+    <!-- Uppercase label living inside a strip header (no outer margin of its own) -->
+    <Style Selector="TextBlock.strip-label">
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMicro}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="LetterSpacing" Value="0.9"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Section header inside the files panel, with a coloured 2px left rule
+         instead of a fully tinted bar. Modifiers: .staged .unstaged .conflict -->
+    <Style Selector="Border.section-header">
+        <Setter Property="Background" Value="{DynamicResource BgSurfaceBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="2,0,0,0"/>
+        <Setter Property="Padding" Value="10,6"/>
+    </Style>
+    <Style Selector="Border.section-header.staged">
+        <Setter Property="BorderBrush" Value="{DynamicResource AddFgBrush}"/>
+    </Style>
+    <Style Selector="Border.section-header.unstaged">
+        <Setter Property="BorderBrush" Value="{DynamicResource ModifyFgBrush}"/>
+    </Style>
+    <Style Selector="Border.section-header.conflict">
+        <Setter Property="BorderBrush" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+
+    <!-- ══════════════════════════ Splitters ═════════════════════════════════
+         A 1px hairline the eye reads as a seam, over a 9px transparent hit
+         target the hand can actually grab. The hairline is a sibling Border in
+         the same 1px-wide grid cell; the splitter overhangs it symmetrically.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <Style Selector="GridSplitter.hairline">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Width" Value="9"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="ZIndex" Value="5"/>
+        <Setter Property="Cursor" Value="SizeWestEast"/>
+    </Style>
+    <Style Selector="GridSplitter.hairline:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SplitterHoverBrush}"/>
+    </Style>
+
+    <Style Selector="GridSplitter.hairline-h">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Height" Value="9"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="ZIndex" Value="5"/>
+        <Setter Property="Cursor" Value="SizeNorthSouth"/>
+    </Style>
+    <Style Selector="GridSplitter.hairline-h:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SplitterHoverBrush}"/>
+    </Style>
+
+    <!-- ══════════════════════════ List row accents ══════════════════════════
+         A 2px accent rule on the selected row. Placed as a Border in the row
+         template; the selector reaches into the item so no viewmodel state is
+         needed. Survives colour-blindness in a way a background tint does not.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <Style Selector="ListBoxItem Border.row-rule">
+        <Setter Property="Width" Value="2"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.13"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="ListBoxItem:selected Border.row-rule">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+    </Style>
+
+    <!-- Ref pill drawn on a commit row: main, origin/main, v1.2.0 -->
+    <Style Selector="Border.ref-pill">
+        <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}"/>
+        <Setter Property="Padding" Value="5,0,5,1"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.ref-pill > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMicro}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <!-- Keycap: a physical-feeling pill for keyboard shortcuts. The 2px bottom
+         border does the "key has depth" work without a real shadow. -->
+    <Style Selector="Border.kbd">
+        <Setter Property="Background" Value="{DynamicResource BgRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1,1,1,2"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}"/>
+        <Setter Property="Padding" Value="7,2,7,3"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.kbd > TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFontFamily}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeLabel}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+
+    <!-- ══════════════════════════ Empty states ══════════════════════════════ -->
+
+    <Style Selector="StackPanel.empty-state">
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Spacing" Value="10"/>
+        <Setter Property="MaxWidth" Value="300"/>
+    </Style>
+    <Style Selector="StackPanel.empty-state Path.icon">
+        <Setter Property="Stroke" Value="{DynamicResource TextDisabledBrush}"/>
+        <Setter Property="Width" Value="30"/>
+        <Setter Property="Height" Value="30"/>
+        <Setter Property="StrokeThickness" Value="1.4"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.empty-title">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.empty-body">
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <!-- ══════════════════════════ Toast ═════════════════════════════════════ -->
+
+    <Style Selector="Border.toast">
+        <Setter Property="Background" Value="{DynamicResource BgOverlayBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}"/>
+        <Setter Property="BoxShadow" Value="0 10 30 -8 #B3000000"/>
+    </Style>
+
+</Styles>

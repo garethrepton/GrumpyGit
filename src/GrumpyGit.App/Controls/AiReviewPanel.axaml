@@ -1,0 +1,199 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GrumpyGit.App.ViewModels"
+             mc:Ignorable="d"
+             x:Class="GrumpyGit.App.Controls.AiReviewPanel"
+             x:DataType="vm:MainWindowViewModel">
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         AI session review.
+
+         Left  — the list of AI working sessions, newest first.
+         Right — the files that session net-changed, ranked by how much scrutiny
+                 they warrant, each tickable as reviewed.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <Border Classes="panel">
+        <Grid ColumnDefinitions="280,Auto,*">
+
+            <!-- ── Sessions ──────────────────────────────────────────────── -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*">
+
+                <Border Grid.Row="0" Classes="pane-header">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Path Classes="icon sm ai"
+                              Data="{StaticResource IconSparkles}"/>
+                        <TextBlock Text="AI SESSIONS" Classes="panel-header" Margin="0"/>
+                        <Border Classes="badge ai"
+                                IsVisible="{Binding HasAiSessions}">
+                            <TextBlock Text="{Binding AiCommitCount}"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="1">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding AiSessions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:AiSessionViewModel">
+                                    <Button Classes="subtle"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch"
+                                            Padding="12,10"
+                                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).SelectAiSessionCommand}"
+                                            CommandParameter="{Binding}">
+                                        <StackPanel Spacing="5">
+
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Border Classes="badge ai">
+                                                    <TextBlock Text="{Binding AgentName}"/>
+                                                </Border>
+                                                <TextBlock Text="{Binding CommitCountLabel}"
+                                                           Classes="caption"
+                                                           VerticalAlignment="Center"/>
+                                            </StackPanel>
+
+                                            <TextBlock Text="{Binding TimeRange}" Classes="caption"/>
+
+                                            <!-- Review progress -->
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <!-- Hidden until the file list is loaded: a ProgressBar with
+                                                     Maximum=0 renders completely full, which would read as
+                                                     "fully reviewed" for a session nobody has opened yet. -->
+                                                <ProgressBar Grid.Column="0"
+                                                             Height="3"
+                                                             VerticalAlignment="Center"
+                                                             Minimum="0"
+                                                             Maximum="{Binding FileCount}"
+                                                             Value="{Binding ReviewedCount}"
+                                                             IsVisible="{Binding FilesLoaded}"
+                                                             Foreground="{DynamicResource ReviewedBrush}"
+                                                             Background="{DynamicResource BgActiveBrush}"/>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding ReviewProgressLabel}"
+                                                           Classes="caption"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Empty state -->
+                        <StackPanel Classes="empty-state"
+                                    IsVisible="{Binding !HasAiSessions}">
+                            <Path Classes="icon lg" Data="{StaticResource IconSparkles}"/>
+                            <TextBlock Classes="empty-title" Text="No AI sessions"/>
+                            <TextBlock Classes="empty-body"
+                                       Text="Commits co-authored by a coding agent will be grouped here for review."/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <GridSplitter Grid.Column="1" Classes="hairline"/>
+
+            <!-- ── Files in the selected session ─────────────────────────── -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*">
+
+                <Border Grid.Row="0" Classes="pane-header">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="SESSION CHANGES" Classes="panel-header" Margin="0"/>
+                            <TextBlock Text="{Binding SelectedAiSession.ChurnLabel}"
+                                       Classes="caption"
+                                       IsVisible="{Binding SelectedAiSession, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                    IsVisible="{Binding SelectedAiSession, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <Button Classes="sm" Content="Next unreviewed"
+                                    ToolTip.Tip="Jump to the next file you haven't ticked off"
+                                    Command="{Binding NextUnreviewedFileCommand}"/>
+                            <Button Classes="sm" Content="Mark all"
+                                    Command="{Binding MarkSessionReviewedCommand}"/>
+                            <Button Classes="sm subtle" Content="Reset"
+                                    Command="{Binding ResetSessionReviewCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Session summary strip -->
+                <Border Grid.Row="1"
+                        Classes="chrome"
+                        Padding="12,8"
+                        IsVisible="{Binding SelectedAiSession, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <StackPanel Orientation="Horizontal" Spacing="14">
+                        <TextBlock Classes="caption" Text="{Binding SelectedAiSession.TimeRange}"/>
+                        <TextBlock Classes="caption" Text="{Binding SelectedAiSession.DurationLabel}"/>
+                        <TextBlock Classes="caption" Text="{Binding SelectedAiSession.CommitCountLabel}"/>
+                        <TextBlock Classes="caption" Text="{Binding SelectedAiSession.ReviewProgressLabel}"/>
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="2">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding SelectedAiSession.Files}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ReviewFileViewModel">
+                                    <Border Padding="10,7"
+                                            Background="Transparent">
+                                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="10">
+
+                                            <!-- Reviewed tick -->
+                                            <CheckBox Grid.Column="0"
+                                                      IsChecked="{Binding IsReviewed}"
+                                                      ToolTip.Tip="Mark this file reviewed"
+                                                      VerticalAlignment="Center"/>
+
+                                            <!-- Risk hint -->
+                                            <Border Grid.Column="1"
+                                                    Width="6" Height="6"
+                                                    CornerRadius="{DynamicResource RadiusPill}"
+                                                    VerticalAlignment="Center"
+                                                    Background="{Binding RiskBrush}"
+                                                    ToolTip.Tip="{Binding RiskReason}"/>
+
+                                            <!-- Path -->
+                                            <Button Grid.Column="2"
+                                                    Classes="subtle"
+                                                    HorizontalAlignment="Stretch"
+                                                    HorizontalContentAlignment="Left"
+                                                    Padding="4,2"
+                                                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ShowReviewFileDiffCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Text="{Binding FileName}"/>
+                                                    <TextBlock Text="{Binding Directory}" Classes="caption"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding ChurnLabel}"
+                                                       Classes="caption mono"
+                                                       VerticalAlignment="Center"/>
+
+                                            <TextBlock Grid.Column="4"
+                                                       Text="{Binding ChangeTypeGlyph}"
+                                                       Classes="caption mono"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <StackPanel Classes="empty-state"
+                                    IsVisible="{Binding SelectedAiSession, Converter={x:Static ObjectConverters.IsNull}}">
+                            <TextBlock Classes="empty-title" Text="Select a session"/>
+                            <TextBlock Classes="empty-body"
+                                       Text="Pick an AI session on the left to review everything it changed, file by file."/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

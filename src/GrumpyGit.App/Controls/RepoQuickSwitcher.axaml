@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GrumpyGit.App.ViewModels"
+             mc:Ignorable="d"
+             x:Class="GrumpyGit.App.Controls.RepoQuickSwitcher"
+             x:DataType="vm:MainWindowViewModel">
+
+    <!-- Ctrl+P repository palette: open tabs first, then recents. -->
+
+    <Border Classes="scrim">
+        <Border Classes="card"
+                Width="560"
+                MaxHeight="420"
+                VerticalAlignment="Top"
+                Margin="0,90,0,0"
+                Padding="0">
+            <Grid RowDefinitions="Auto,Auto,*">
+
+                <!-- Search -->
+                <Border Grid.Row="0" Padding="14,12">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                        <Path Grid.Column="0" Classes="icon" Data="{StaticResource IconSearch}"/>
+                        <TextBox Grid.Column="1"
+                                 x:Name="QuickSwitchInput"
+                                 Text="{Binding QuickSwitchQuery, Mode=TwoWay}"
+                                 Watermark="Switch repository…"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 FontSize="{DynamicResource FontSizeSubtitle}"/>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="1" Classes="divider"/>
+
+                <!-- Results -->
+                <ScrollViewer Grid.Row="2">
+                    <StackPanel>
+                        <ListBox ItemsSource="{Binding QuickSwitchResults}"
+                                 SelectedItem="{Binding SelectedQuickSwitchEntry, Mode=TwoWay}"
+                                 Background="Transparent"
+                                 BorderThickness="0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:QuickSwitchEntryViewModel">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,2">
+                                        <Path Grid.Column="0" Classes="icon sm"
+                                              Data="{StaticResource IconFolderOpen}"/>
+                                        <StackPanel Grid.Column="1" Spacing="1">
+                                            <TextBlock Text="{Binding DisplayName}"/>
+                                            <TextBlock Text="{Binding ParentPath}" Classes="caption"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="2" Classes="badge"
+                                                IsVisible="{Binding HasStatusLabel}"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding StatusLabel}"/>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <StackPanel Classes="empty-state"
+                                    IsVisible="{Binding !QuickSwitchResults.Count}">
+                            <TextBlock Classes="empty-title" Text="No matching repository"/>
+                            <TextBlock Classes="empty-body"
+                                       Text="Try a shorter search, or open a new repository with Ctrl+O."/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>

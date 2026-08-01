@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GrumpyGit.App.Controls.ToastHost"
+             IsHitTestVisible="True"
+             HorizontalAlignment="Right"
+             VerticalAlignment="Top">
+
+    <StackPanel x:Name="ToastStack"
+                Spacing="0"
+                Margin="0,8,16,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"/>
+</UserControl>

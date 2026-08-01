@@ -1,0 +1,243 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         GrumpyGit design tokens.
+
+         Every colour, radius, spacing value and font size in the app resolves
+         through this file. Nothing downstream should contain a literal hex.
+
+         Naming: <Role><Variant>Brush   e.g. BgSurfaceBrush, TextSecondaryBrush
+         Elevation runs Base → Sunken → Surface → Raised → Overlay (darkest to
+         lightest in dark mode; the light theme inverts the ramp).
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ───────────────────────────── DARK (primary) ──────────────────── -->
+        <ResourceDictionary x:Key="Dark">
+
+            <!-- Surfaces / elevation ramp -->
+            <SolidColorBrush x:Key="BgBaseBrush"      Color="#0B0D12"/>
+            <SolidColorBrush x:Key="BgSunkenBrush"    Color="#0F1219"/>
+            <SolidColorBrush x:Key="BgSurfaceBrush"   Color="#141822"/>
+            <SolidColorBrush x:Key="BgRaisedBrush"    Color="#1A1F2B"/>
+            <SolidColorBrush x:Key="BgOverlayBrush"   Color="#1E2431"/>
+            <SolidColorBrush x:Key="BgHoverBrush"     Color="#232A38"/>
+            <SolidColorBrush x:Key="BgActiveBrush"    Color="#2B3444"/>
+            <SolidColorBrush x:Key="BgSelectedBrush"  Color="#1D2743"/>
+            <SolidColorBrush x:Key="ScrimBrush"       Color="#B00A0C11"/>
+
+            <!-- Borders -->
+            <SolidColorBrush x:Key="BorderSubtleBrush"  Color="#1C2230"/>
+            <SolidColorBrush x:Key="BorderDefaultBrush" Color="#28303F"/>
+            <SolidColorBrush x:Key="BorderStrongBrush"  Color="#39445A"/>
+
+            <!-- Text -->
+            <SolidColorBrush x:Key="TextPrimaryBrush"   Color="#E7ECF5"/>
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A2ACC0"/>
+            <SolidColorBrush x:Key="TextTertiaryBrush"  Color="#6C7789"/>
+            <SolidColorBrush x:Key="TextDisabledBrush"  Color="#48525F"/>
+            <SolidColorBrush x:Key="TextInverseBrush"   Color="#0B0D12"/>
+
+            <!-- Accent — indigo/violet, doubles as the "AI" identity colour -->
+            <SolidColorBrush x:Key="AccentBrush"        Color="#7B68F0"/>
+            <SolidColorBrush x:Key="AccentHoverBrush"   Color="#8D7CF5"/>
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="#6754DF"/>
+            <SolidColorBrush x:Key="AccentTextBrush"    Color="#AFA2FF"/>
+            <SolidColorBrush x:Key="AccentSubtleBrush"  Color="#1A1733"/>
+            <SolidColorBrush x:Key="AccentBorderBrush"  Color="#453A96"/>
+
+            <!-- Semantic: additions / deletions / modifications -->
+            <SolidColorBrush x:Key="AddFgBrush"         Color="#4FC463"/>
+            <SolidColorBrush x:Key="AddBgBrush"         Color="#0E2A17"/>
+            <SolidColorBrush x:Key="AddBgStrongBrush"   Color="#1A4A28"/>
+            <SolidColorBrush x:Key="AddBorderBrush"     Color="#265C33"/>
+
+            <SolidColorBrush x:Key="DeleteFgBrush"      Color="#FA6D64"/>
+            <SolidColorBrush x:Key="DeleteBgBrush"      Color="#2C1214"/>
+            <SolidColorBrush x:Key="DeleteBgStrongBrush" Color="#4E1B1E"/>
+            <SolidColorBrush x:Key="DeleteBorderBrush"  Color="#63262A"/>
+
+            <SolidColorBrush x:Key="ModifyFgBrush"      Color="#D8A32C"/>
+            <SolidColorBrush x:Key="ModifyBgBrush"      Color="#2B2109"/>
+
+            <SolidColorBrush x:Key="InfoFgBrush"        Color="#5FA9FF"/>
+            <SolidColorBrush x:Key="InfoBgBrush"        Color="#0D2338"/>
+
+            <SolidColorBrush x:Key="WarnFgBrush"        Color="#E0A33A"/>
+            <SolidColorBrush x:Key="WarnBgBrush"        Color="#2E2410"/>
+            <SolidColorBrush x:Key="WarnBorderBrush"    Color="#5A4415"/>
+
+            <SolidColorBrush x:Key="DangerFgBrush"      Color="#FA6D64"/>
+            <SolidColorBrush x:Key="DangerBgBrush"      Color="#33161A"/>
+            <SolidColorBrush x:Key="DangerBorderBrush"  Color="#6E2A2E"/>
+
+            <SolidColorBrush x:Key="SuccessFgBrush"     Color="#4FC463"/>
+            <SolidColorBrush x:Key="SuccessBgBrush"     Color="#102A18"/>
+
+            <!-- AI attribution + review state -->
+            <SolidColorBrush x:Key="AiFgBrush"          Color="#B49BFF"/>
+            <SolidColorBrush x:Key="AiBgBrush"          Color="#1C1734"/>
+            <SolidColorBrush x:Key="AiBorderBrush"      Color="#4A3C99"/>
+            <SolidColorBrush x:Key="AiGlowBrush"        Color="#332B6B"/>
+
+            <SolidColorBrush x:Key="RiskHighBrush"      Color="#FA6D64"/>
+            <SolidColorBrush x:Key="RiskMediumBrush"    Color="#E0A33A"/>
+            <SolidColorBrush x:Key="RiskLowBrush"       Color="#4FC463"/>
+            <SolidColorBrush x:Key="ReviewedBrush"      Color="#4FC463"/>
+            <SolidColorBrush x:Key="UnreviewedBrush"    Color="#48525F"/>
+
+            <!-- Commit graph lanes. Deliberately distinct from the semantic
+                 add/delete/warn hues so a lane colour is never misread as state. -->
+            <SolidColorBrush x:Key="Lane0Brush" Color="#6E9BFF"/>
+            <SolidColorBrush x:Key="Lane1Brush" Color="#FF7B72"/>
+            <SolidColorBrush x:Key="Lane2Brush" Color="#56D364"/>
+            <SolidColorBrush x:Key="Lane3Brush" Color="#E3B341"/>
+            <SolidColorBrush x:Key="Lane4Brush" Color="#56D4DD"/>
+            <SolidColorBrush x:Key="Lane5Brush" Color="#C297FF"/>
+            <SolidColorBrush x:Key="Lane6Brush" Color="#FFA657"/>
+            <SolidColorBrush x:Key="Lane7Brush" Color="#FF8AD8"/>
+
+            <!-- Diff line painting.
+                 These are ALPHA tints, not slabs: they are drawn beneath the
+                 text in KnownLayer.Background, so an opaque fill would flatten
+                 the TextMate syntax colours on top. Line-level ~18%, word-level
+                 ~40% — the gap is what makes "what actually changed" readable. -->
+            <SolidColorBrush x:Key="DiffAddLineBrush"   Color="#2E4FC463"/>
+            <SolidColorBrush x:Key="DiffAddWordBrush"   Color="#664FC463"/>
+            <SolidColorBrush x:Key="DiffDelLineBrush"   Color="#2EFA6D64"/>
+            <SolidColorBrush x:Key="DiffDelWordBrush"   Color="#66FA6D64"/>
+            <SolidColorBrush x:Key="DiffHunkLineBrush"  Color="#245FA9FF"/>
+
+            <!-- Diff gutter / editor chrome -->
+            <SolidColorBrush x:Key="EditorBgBrush"      Color="#0F1219"/>
+            <SolidColorBrush x:Key="GutterBgBrush"      Color="#0B0D12"/>
+            <SolidColorBrush x:Key="GutterFgBrush"      Color="#4E5769"/>
+            <SolidColorBrush x:Key="CurrentLineBrush"   Color="#181E29"/>
+
+            <!-- Translucent accent band shown while a splitter is grabbable -->
+            <SolidColorBrush x:Key="SplitterHoverBrush" Color="#557B68F0"/>
+        </ResourceDictionary>
+
+        <!-- ───────────────────────────── LIGHT ───────────────────────────── -->
+        <ResourceDictionary x:Key="Light">
+
+            <SolidColorBrush x:Key="BgBaseBrush"      Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="BgSunkenBrush"    Color="#F2F4F8"/>
+            <SolidColorBrush x:Key="BgSurfaceBrush"   Color="#F8F9FC"/>
+            <SolidColorBrush x:Key="BgRaisedBrush"    Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="BgOverlayBrush"   Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="BgHoverBrush"     Color="#EDF0F6"/>
+            <SolidColorBrush x:Key="BgActiveBrush"    Color="#E2E7F0"/>
+            <SolidColorBrush x:Key="BgSelectedBrush"  Color="#E4E6FD"/>
+            <SolidColorBrush x:Key="ScrimBrush"       Color="#66111827"/>
+
+            <SolidColorBrush x:Key="BorderSubtleBrush"  Color="#E8EBF2"/>
+            <SolidColorBrush x:Key="BorderDefaultBrush" Color="#D5DAE5"/>
+            <SolidColorBrush x:Key="BorderStrongBrush"  Color="#B4BCCC"/>
+
+            <SolidColorBrush x:Key="TextPrimaryBrush"   Color="#141822"/>
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#4B5565"/>
+            <SolidColorBrush x:Key="TextTertiaryBrush"  Color="#727D8F"/>
+            <SolidColorBrush x:Key="TextDisabledBrush"  Color="#A3ABB9"/>
+            <SolidColorBrush x:Key="TextInverseBrush"   Color="#FFFFFF"/>
+
+            <SolidColorBrush x:Key="AccentBrush"        Color="#5B48D6"/>
+            <SolidColorBrush x:Key="AccentHoverBrush"   Color="#6A57E8"/>
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="#4B3AB8"/>
+            <SolidColorBrush x:Key="AccentTextBrush"    Color="#5B48D6"/>
+            <SolidColorBrush x:Key="AccentSubtleBrush"  Color="#EFECFE"/>
+            <SolidColorBrush x:Key="AccentBorderBrush"  Color="#C3BAFA"/>
+
+            <SolidColorBrush x:Key="AddFgBrush"         Color="#1A7F37"/>
+            <SolidColorBrush x:Key="AddBgBrush"         Color="#E6F6EA"/>
+            <SolidColorBrush x:Key="AddBgStrongBrush"   Color="#C7EBD1"/>
+            <SolidColorBrush x:Key="AddBorderBrush"     Color="#A9DDB8"/>
+
+            <SolidColorBrush x:Key="DeleteFgBrush"      Color="#C93C37"/>
+            <SolidColorBrush x:Key="DeleteBgBrush"      Color="#FDECEB"/>
+            <SolidColorBrush x:Key="DeleteBgStrongBrush" Color="#FAD3D1"/>
+            <SolidColorBrush x:Key="DeleteBorderBrush"  Color="#F2B5B2"/>
+
+            <SolidColorBrush x:Key="ModifyFgBrush"      Color="#9A6700"/>
+            <SolidColorBrush x:Key="ModifyBgBrush"      Color="#FFF6DF"/>
+
+            <SolidColorBrush x:Key="InfoFgBrush"        Color="#0969DA"/>
+            <SolidColorBrush x:Key="InfoBgBrush"        Color="#E5F0FC"/>
+
+            <SolidColorBrush x:Key="WarnFgBrush"        Color="#9A6700"/>
+            <SolidColorBrush x:Key="WarnBgBrush"        Color="#FFF6DF"/>
+            <SolidColorBrush x:Key="WarnBorderBrush"    Color="#F0D9A0"/>
+
+            <SolidColorBrush x:Key="DangerFgBrush"      Color="#C93C37"/>
+            <SolidColorBrush x:Key="DangerBgBrush"      Color="#FDECEB"/>
+            <SolidColorBrush x:Key="DangerBorderBrush"  Color="#F2B5B2"/>
+
+            <SolidColorBrush x:Key="SuccessFgBrush"     Color="#1A7F37"/>
+            <SolidColorBrush x:Key="SuccessBgBrush"     Color="#E6F6EA"/>
+
+            <SolidColorBrush x:Key="AiFgBrush"          Color="#6A4FD8"/>
+            <SolidColorBrush x:Key="AiBgBrush"          Color="#F0ECFE"/>
+            <SolidColorBrush x:Key="AiBorderBrush"      Color="#C7BCF8"/>
+            <SolidColorBrush x:Key="AiGlowBrush"        Color="#DED5FC"/>
+
+            <SolidColorBrush x:Key="RiskHighBrush"      Color="#C93C37"/>
+            <SolidColorBrush x:Key="RiskMediumBrush"    Color="#9A6700"/>
+            <SolidColorBrush x:Key="RiskLowBrush"       Color="#1A7F37"/>
+            <SolidColorBrush x:Key="ReviewedBrush"      Color="#1A7F37"/>
+            <SolidColorBrush x:Key="UnreviewedBrush"    Color="#A3ABB9"/>
+
+            <SolidColorBrush x:Key="Lane0Brush" Color="#0550AE"/>
+            <SolidColorBrush x:Key="Lane1Brush" Color="#CF222E"/>
+            <SolidColorBrush x:Key="Lane2Brush" Color="#1A7F37"/>
+            <SolidColorBrush x:Key="Lane3Brush" Color="#9A6700"/>
+            <SolidColorBrush x:Key="Lane4Brush" Color="#00707B"/>
+            <SolidColorBrush x:Key="Lane5Brush" Color="#8250DF"/>
+            <SolidColorBrush x:Key="Lane6Brush" Color="#BC4C00"/>
+            <SolidColorBrush x:Key="Lane7Brush" Color="#BF3989"/>
+
+            <SolidColorBrush x:Key="DiffAddLineBrush"   Color="#241A7F37"/>
+            <SolidColorBrush x:Key="DiffAddWordBrush"   Color="#4D1A7F37"/>
+            <SolidColorBrush x:Key="DiffDelLineBrush"   Color="#24C93C37"/>
+            <SolidColorBrush x:Key="DiffDelWordBrush"   Color="#4DC93C37"/>
+            <SolidColorBrush x:Key="DiffHunkLineBrush"  Color="#1F0969DA"/>
+
+            <SolidColorBrush x:Key="EditorBgBrush"      Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="GutterBgBrush"      Color="#F8F9FC"/>
+            <SolidColorBrush x:Key="GutterFgBrush"      Color="#8B94A3"/>
+            <SolidColorBrush x:Key="CurrentLineBrush"   Color="#F2F4F8"/>
+
+            <SolidColorBrush x:Key="SplitterHoverBrush" Color="#4D5B48D6"/>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- ═══════════════════════════ Non-themed tokens ═════════════════════ -->
+
+    <!-- Type scale -->
+    <x:Double x:Key="FontSizeMicro">10</x:Double>
+    <x:Double x:Key="FontSizeLabel">11</x:Double>
+    <x:Double x:Key="FontSizeSmall">12</x:Double>
+    <x:Double x:Key="FontSizeBody">13</x:Double>
+    <x:Double x:Key="FontSizeSubtitle">15</x:Double>
+    <x:Double x:Key="FontSizeTitle">18</x:Double>
+    <x:Double x:Key="FontSizeDisplay">22</x:Double>
+    <x:Double x:Key="FontSizeCode">12.5</x:Double>
+
+    <FontFamily x:Key="MonoFontFamily">Cascadia Code,JetBrains Mono,Consolas,Menlo,monospace</FontFamily>
+
+    <!-- Corner radii -->
+    <CornerRadius x:Key="RadiusSm">4</CornerRadius>
+    <CornerRadius x:Key="RadiusMd">6</CornerRadius>
+    <CornerRadius x:Key="RadiusLg">10</CornerRadius>
+    <CornerRadius x:Key="RadiusXl">14</CornerRadius>
+    <CornerRadius x:Key="RadiusPill">999</CornerRadius>
+
+    <!-- Spacing -->
+    <Thickness x:Key="PadTight">6,3</Thickness>
+    <Thickness x:Key="PadControl">10,5</Thickness>
+    <Thickness x:Key="PadRoomy">14,8</Thickness>
+    <Thickness x:Key="PadPanel">12</Thickness>
+    <Thickness x:Key="PadDialog">24,20</Thickness>
+
+</ResourceDictionary>

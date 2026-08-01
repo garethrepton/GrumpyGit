@@ -1,0 +1,1909 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:GrumpyGit.App.ViewModels"
+        xmlns:controls="using:GrumpyGit.App.Controls"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="1200" d:DesignHeight="700"
+        x:Class="GrumpyGit.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="GrumpyGit"
+        Background="{DynamicResource BgBaseBrush}"
+        MinWidth="800"
+        MinHeight="500">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         Window-local styles.
+
+         Almost everything now comes from Themes/Controls.axaml. What remains
+         here is genuinely local: the compact staging toggle in file rows, and
+         width hints for the branch pickers. The previous bare `ListBoxItem`
+         selector set a monospace font on EVERY list in the window (branches,
+         tags, stash, commits, files) — that is gone, so lists inherit the
+         proportional UI font and only code-ish text opts into `.mono`.
+         ══════════════════════════════════════════════════════════════════════ -->
+    <Window.Resources>
+        <!-- Shared row template for every changed-files tree (conflicts, staged,
+             unstaged, commit files). File nodes carry the same staging affordances
+             as the flat list so the tree is not a read-only view. -->
+        <TreeDataTemplate x:Key="FileTreeTemplate"
+                          x:DataType="vm:FileTreeNodeViewModel"
+                          ItemsSource="{Binding Children}">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                  ToolTip.Tip="{Binding Path}">
+                <Path Grid.Column="0"
+                      Classes="icon sm"
+                      Data="{DynamicResource IconFolderOpen}"
+                      IsVisible="{Binding IsDirectory}"/>
+
+                <!-- Grid, not StackPanel: the name needs a star column so it trims
+                     instead of overflowing into the +/- counts. -->
+                <Grid Grid.Column="1"
+                      ColumnDefinitions="*,Auto"
+                      Margin="6,0,4,0"
+                      VerticalAlignment="Center">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Name}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                    <Path Grid.Column="1"
+                          Classes="icon sm warn"
+                          Margin="5,0,0,0"
+                          Data="{DynamicResource IconFlag}"
+                          IsVisible="{Binding File.HasNote, FallbackValue=False}"
+                          ToolTip.Tip="This file has a review note"/>
+                </Grid>
+
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="5"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{Binding AddedLabel}"
+                               Classes="mono"
+                               FontSize="{DynamicResource FontSizeMicro}"
+                               Foreground="{DynamicResource AddFgBrush}"/>
+                    <TextBlock Text="{Binding RemovedLabel}"
+                               Classes="mono"
+                               FontSize="{DynamicResource FontSizeMicro}"
+                               Foreground="{DynamicResource DeleteFgBrush}"/>
+                </StackPanel>
+
+                <!-- Stage / unstage, only on file nodes in the working tree -->
+                <Button Grid.Column="3"
+                        Classes="stage-btn"
+                        Margin="4,0,0,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding File.ToggleStagingCommand}"
+                        IsVisible="{Binding File.IsWorkingTreeFile, FallbackValue=False}">
+                    <Panel>
+                        <Path Classes="icon sm"
+                              Data="{DynamicResource IconMinus}"
+                              IsVisible="{Binding File.IsStaged, FallbackValue=False}"/>
+                        <Path Classes="icon sm"
+                              Data="{DynamicResource IconPlus}"
+                              IsVisible="{Binding !File.IsStaged, FallbackValue=False}"/>
+                    </Panel>
+                </Button>
+            </Grid>
+        </TreeDataTemplate>
+    </Window.Resources>
+
+    <Window.Styles>
+
+        <!-- Tree rows track their node's expansion so the expand/collapse toggle
+             actually moves the TreeView rather than only the viewmodel. -->
+        <Style Selector="TreeViewItem" x:DataType="vm:FileTreeNodeViewModel">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+        </Style>
+
+        <!-- Small ±/× staging toggle button inside file list rows -->
+        <Style Selector="Button.stage-btn">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeLabel}"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.stage-btn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource BgHoverBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        </Style>
+
+        <!-- Branch pickers: token-styled by the global ComboBox rule, sized here -->
+        <Style Selector="ComboBox.branch-combo">
+            <Setter Property="MinWidth" Value="150"/>
+        </Style>
+
+        <!-- Commit message / branch name inputs -->
+        <Style Selector="TextBox.commit-msg, TextBox.branch-input">
+            <Setter Property="Padding" Value="8,5"/>
+        </Style>
+    </Window.Styles>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         Root layout: Toolbar / Branch-bar / Content / Status-bar
+         Row 0: toolbar
+         Row 1: branch operations bar (collapsed when not in use)
+         Row 2: three-panel content
+         Row 3: status bar
+         ══════════════════════════════════════════════════════════════════════ -->
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+
+        <!-- ── Row 0: Repository tab bar ─────────────────────────────────── -->
+        <Border Grid.Row="0"
+                Classes="chrome"
+                BorderThickness="0,0,0,1"
+                Padding="6,3,6,0"
+                IsVisible="{Binding HasMultipleTabs}">
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right"
+                        Classes="subtle icon-only"
+                        Command="{Binding OpenRepoInNewTabCommand}"
+                        ToolTip.Tip="Open repo in new tab"
+                        VerticalAlignment="Center"
+                        Margin="4,0,0,3">
+                    <Path Classes="icon sm" Data="{DynamicResource IconPlus}"/>
+                </Button>
+                <ItemsControl ItemsSource="{Binding RepoTabs}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="3"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RepoTabViewModel"
+                                      x:CompileBindings="False">
+                            <Border CornerRadius="7,7,0,0"
+                                    Padding="12,6"
+                                    Cursor="Hand"
+                                    Background="{DynamicResource BgSurfaceBrush}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               FontSize="{DynamicResource FontSizeSmall}"
+                                               VerticalAlignment="Center"
+                                               Cursor="Hand"/>
+                                    <Button Classes="subtle icon-only"
+                                            Padding="2"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Close tab"
+                                            CommandParameter="{Binding}"
+                                            Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
+                                        <Path Classes="icon sm" Data="{DynamicResource IconClose}"/>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+        </Border>
+
+        <!-- ── Row 1: Toolbar ──────────────────────────────────────────────── -->
+        <!-- Grouped by *consequence*, not by alphabet: the sync group (Pull /
+             Push) is the only place an accent appears, so the eye lands on the
+             two operations that touch the network. Utilities demote to
+             icon-only on the right. Gaps replace the old vertical rules. -->
+        <Border Grid.Row="1"
+                Classes="chrome"
+                BorderThickness="0,0,0,1"
+                Padding="10,7">
+            <DockPanel LastChildFill="True">
+
+                <!-- Right cluster: view toggles and settings, icon-only -->
+                <StackPanel DockPanel.Dock="Right"
+                            Orientation="Horizontal"
+                            Spacing="2"
+                            VerticalAlignment="Center">
+
+                    <!-- AI review is this client's reason to exist, so it is a
+                         labelled entry point rather than another anonymous icon. -->
+                    <Button Command="{Binding ToggleAiReviewCommand}"
+                            IsEnabled="{Binding HasAiSessions}"
+                            Margin="0,0,8,0"
+                            ToolTip.Tip="Review AI-authored changes (Ctrl+Shift+R)">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Path Classes="icon sm ai" Data="{DynamicResource IconSparkles}"/>
+                            <TextBlock Text="AI Review" VerticalAlignment="Center"/>
+                            <Border Classes="badge ai" IsVisible="{Binding HasAiSessions}">
+                                <TextBlock Text="{Binding AiCommitCount}"/>
+                            </Border>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Classes="icon-only"
+                            Command="{Binding ToggleGraphCommand}"
+                            ToolTip.Tip="Toggle commit graph">
+                        <Path Classes="icon" Data="{DynamicResource IconGraph}"/>
+                    </Button>
+                    <Button Classes="icon-only"
+                            Command="{Binding ToggleConsoleCommand}"
+                            ToolTip.Tip="Toggle terminal">
+                        <Path Classes="icon" Data="{DynamicResource IconTerminal}"/>
+                    </Button>
+                    <Button Classes="icon-only"
+                            Command="{Binding TogglePrPanelCommand}"
+                            ToolTip.Tip="Toggle pull requests panel">
+                        <Path Classes="icon" Data="{DynamicResource IconPullRequest}"/>
+                    </Button>
+                    <Button Classes="icon-only"
+                            Command="{Binding ToggleSettingsCommand}"
+                            ToolTip.Tip="Settings (Ctrl+,)">
+                        <Path Classes="icon" Data="{DynamicResource IconSettings}"/>
+                    </Button>
+                </StackPanel>
+
+                <!-- Left clusters -->
+                <StackPanel DockPanel.Dock="Left"
+                            Orientation="Horizontal"
+                            Spacing="16"
+                            VerticalAlignment="Center">
+
+                    <!-- Repo -->
+                    <Button Command="{Binding OpenRepoCommand}"
+                            ToolTip.Tip="Open a repository">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <Path Classes="icon" Data="{DynamicResource IconFolderOpen}"/>
+                            <TextBlock Text="Open Repo" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Branch -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <ComboBox Classes="branch-combo"
+                                  ItemsSource="{Binding Branches}"
+                                  SelectedItem="{Binding SelectedBranch, Mode=TwoWay}"
+                                  ToolTip.Tip="Switch branch"
+                                  VerticalAlignment="Center"/>
+                        <Button Classes="sm"
+                                Command="{Binding StartCreateBranchCommand}"
+                                ToolTip.Tip="Create a new branch">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Path Classes="icon sm" Data="{DynamicResource IconBranch}"/>
+                                <TextBlock Text="New" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="sm"
+                                Command="{Binding StartMergeCommand}"
+                                ToolTip.Tip="Merge a branch into the current one">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Path Classes="icon sm" Data="{DynamicResource IconMerge}"/>
+                                <TextBlock Text="Merge" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Sync — the focal group. Push is the single accent. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Command="{Binding PullCommand}"
+                                ToolTip.Tip="Pull from remote">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <Path Classes="icon" Data="{DynamicResource IconPull}"/>
+                                <TextBlock Text="Pull" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="primary"
+                                Command="{Binding PushCommand}"
+                                ToolTip.Tip="Push to remote">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <Path Classes="icon" Data="{DynamicResource IconPush}"/>
+                                <TextBlock Text="Push" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Working state -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Classes="sm"
+                                Command="{Binding StashCommand}"
+                                ToolTip.Tip="Stash working tree changes">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Path Classes="icon sm" Data="{DynamicResource IconArchive}"/>
+                                <TextBlock Text="Stash" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="sm"
+                                Content="Pop"
+                                Command="{Binding StashPopCommand}"
+                                ToolTip.Tip="Restore the most recent stash"
+                                IsEnabled="{Binding HasStashEntries}"/>
+                        <Button Classes="sm"
+                                Command="{Binding UndoLastCommitCommand}"
+                                ToolTip.Tip="Undo the last commit (soft reset). Changes return to staging.">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Path Classes="icon sm" Data="{DynamicResource IconUndo}"/>
+                                <TextBlock Text="Undo" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Repo path + remote URL — fills remaining toolbar width.
+                     Both were previously below the AA contrast floor. -->
+                <StackPanel Margin="20,0,12,0"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{Binding RepoPath}"
+                               Classes="mono secondary"
+                               FontSize="{DynamicResource FontSizeLabel}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding RemoteUrl}"
+                               Classes="mono tertiary"
+                               FontSize="{DynamicResource FontSizeLabel}"
+                               TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding RemoteUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ── Row 2: Branch operations bar (create / merge) ──────────────── -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource BgSurfaceBrush}"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="12,8"
+                IsVisible="{Binding IsBranchBarVisible}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+
+                <!-- Create-branch sub-panel -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            IsVisible="{Binding IsCreatingBranch}">
+                    <Path Classes="icon" Data="{DynamicResource IconBranch}"/>
+                    <TextBlock Text="New branch"
+                               Classes="secondary"
+                               VerticalAlignment="Center"/>
+                    <TextBox Classes="branch-input"
+                             Text="{Binding NewBranchName, Mode=TwoWay}"
+                             Watermark="feature/my-branch"
+                             Width="240"/>
+                    <Button Classes="primary"
+                            Content="Create &amp; Switch"
+                            Command="{Binding ConfirmCreateBranchCommand}"/>
+                    <Button Classes="subtle"
+                            Content="Cancel"
+                            Command="{Binding CancelCreateBranchCommand}"/>
+                </StackPanel>
+
+                <!-- Merge sub-panel -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            IsVisible="{Binding IsMerging}">
+                    <Path Classes="icon" Data="{DynamicResource IconMerge}"/>
+                    <TextBlock Text="Merge into current"
+                               Classes="secondary"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Classes="branch-combo"
+                              ItemsSource="{Binding MergeBranches}"
+                              SelectedItem="{Binding SelectedMergeBranch, Mode=TwoWay}"
+                              Width="240"/>
+                    <Button Classes="primary"
+                            Content="Merge"
+                            Command="{Binding ConfirmMergeCommand}"/>
+                    <Button Classes="subtle"
+                            Content="Cancel"
+                            Command="{Binding CancelMergeCommand}"/>
+                </StackPanel>
+
+            </StackPanel>
+        </Border>
+
+        <!-- ── Row 3: Main content area ─────────────────────────────────────── -->
+        <!-- Layout: [Branches sidebar | Commit log + bottom detail panel] -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <!-- Collapses to 0 in full-screen diff mode -->
+                <ColumnDefinition Width="{Binding SidebarWidth}"/>
+                <ColumnDefinition Width="1"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Column 0: Branches sidebar ───────────────────────────────── -->
+            <Border Grid.Column="0" Classes="panel"
+                    IsVisible="{Binding IsChromeVisible}">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <TextBlock Grid.Row="0"
+                               Classes="panel-header"
+                               Text="BRANCHES"/>
+                    <Panel Grid.Row="1">
+                        <!-- Empty state: no repository open yet -->
+                        <StackPanel Classes="empty-state"
+                                    Margin="12"
+                                    IsVisible="{Binding !Branches.Count}">
+                            <Path Classes="icon" Data="{DynamicResource IconBranch}"/>
+                            <TextBlock Classes="empty-body" Text="No branches yet"/>
+                        </StackPanel>
+                        <ListBox Background="Transparent"
+                                 BorderThickness="0"
+                                 ItemsSource="{Binding Branches}"
+                                 SelectedItem="{Binding SelectedBranch, Mode=TwoWay}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Panel>
+
+                    <!-- Tags + Stash below branches -->
+                    <StackPanel Grid.Row="2">
+
+                    <!-- Tags section -->
+                    <StackPanel IsVisible="{Binding !!Tags.Count}">
+                        <TextBlock Classes="panel-header"
+                                   Text="TAGS"/>
+                        <ListBox Background="Transparent"
+                                 BorderThickness="0"
+                                 ItemsSource="{Binding Tags}"
+                                 MaxHeight="150"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TagViewModel">
+                                    <Grid ColumnDefinitions="*,Auto,Auto">
+                                        <Grid.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Push Tag"
+                                                          x:CompileBindings="False"
+                                                          CommandParameter="{Binding Name}"
+                                                          Command="{Binding DataContext.PushTagCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
+                                                <MenuItem Header="Delete Tag"
+                                                          x:CompileBindings="False"
+                                                          CommandParameter="{Binding Name}"
+                                                          Command="{Binding DataContext.DeleteTagCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
+                                            </ContextMenu>
+                                        </Grid.ContextMenu>
+                                        <StackPanel Grid.Column="0"
+                                                    Orientation="Horizontal"
+                                                    Spacing="7">
+                                            <Path Classes="icon sm success"
+                                                  Data="{DynamicResource IconTag}"/>
+                                            <TextBlock Text="{Binding DisplayText}"
+                                                       Foreground="{DynamicResource AddFgBrush}"
+                                                       FontSize="{DynamicResource FontSizeLabel}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+
+                    <!-- Stash entries -->
+                    <StackPanel IsVisible="{Binding HasStashEntries}">
+                        <TextBlock Classes="panel-header"
+                                   Text="STASH"/>
+                        <ListBox Background="Transparent"
+                                 BorderThickness="0"
+                                 ItemsSource="{Binding StashEntries}"
+                                 MaxHeight="120"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <StackPanel Orientation="Horizontal" Spacing="7">
+                                        <Path Classes="icon sm"
+                                              Data="{DynamicResource IconArchive}"/>
+                                        <TextBlock Text="{Binding}"
+                                                   FontSize="{DynamicResource FontSizeLabel}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+
+                    </StackPanel> <!-- end Tags+Stash wrapper -->
+                </Grid>
+            </Border>
+
+            <!-- Splitter: branches | main. 1px seam, 9px grab target. -->
+            <Border Grid.Column="1" Background="{DynamicResource BorderSubtleBrush}"
+                    IsVisible="{Binding IsChromeVisible}"/>
+            <GridSplitter Grid.Column="1"
+                          IsVisible="{Binding IsChromeVisible}"
+                          Classes="hairline"
+                          ResizeDirection="Columns"
+                          VerticalAlignment="Stretch"/>
+
+            <!-- Column 2: Commit log (top) + detail panel (bottom) ──────── -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <!-- Collapses to 0 in full-screen diff mode -->
+                    <RowDefinition Height="{Binding CommitLogHeight}"/>
+                    <RowDefinition Height="1"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Top: Commit log ──────────────────────────────────────── -->
+                <Border Grid.Row="0" Classes="panel"
+                        IsVisible="{Binding IsChromeVisible}">
+                    <Grid RowDefinitions="Auto,Auto,Auto,*">
+                        <DockPanel Grid.Row="0">
+                            <TextBlock Classes="panel-header"
+                                       Text="COMMIT GRAPH"
+                                       DockPanel.Dock="Left"/>
+                            <Button DockPanel.Dock="Right"
+                                    Classes="icon-only"
+                                    Command="{Binding ToggleSearchCommand}"
+                                    Margin="4,4,8,0"
+                                    VerticalAlignment="Center"
+                                    ToolTip.Tip="Search commits (Ctrl+F)">
+                                <Path Classes="icon sm" Data="{DynamicResource IconSearch}"/>
+                            </Button>
+                        </DockPanel>
+
+                        <!-- Search bar (collapsible) -->
+                        <Border Grid.Row="1"
+                                Padding="12,4,12,8"
+                                IsVisible="{Binding IsSearchVisible}">
+                            <TextBox x:Name="CommitSearchBox"
+                                     Classes="commit-msg"
+                                     Watermark="Search commits by message, author, or SHA…"
+                                     Text="{Binding SearchQuery, Mode=TwoWay}"/>
+                        </Border>
+
+                        <!-- Compare header (shown during range compare) -->
+                        <Border Grid.Row="2"
+                                Background="{DynamicResource InfoBgBrush}"
+                                Padding="12,6"
+                                IsVisible="{Binding IsComparing}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right"
+                                        Classes="subtle sm"
+                                        Content="Cancel"
+                                        Command="{Binding CancelCompareCommand}"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Path Classes="icon sm" Data="{DynamicResource IconFileDiff}"
+                                          Stroke="{DynamicResource InfoFgBrush}"/>
+                                    <TextBlock Text="{Binding CompareHeader}"
+                                               Foreground="{DynamicResource InfoFgBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Panel Grid.Row="3">
+                            <StackPanel Classes="empty-state"
+                                        IsVisible="{Binding !Commits.Count}">
+                                <Path Classes="icon" Data="{DynamicResource IconCommit}"/>
+                                <TextBlock Classes="empty-title" Text="No commits yet"/>
+                                <TextBlock Classes="empty-body"
+                                           Text="Open a repository, or make your first commit to see history here."/>
+                            </StackPanel>
+                            <ListBox x:Name="CommitListBox"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     ItemsSource="{Binding Commits}"
+                                     SelectedItem="{Binding SelectedCommit, Mode=TwoWay}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                     IsVisible="{Binding !!Commits.Count}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:CommitRowViewModel"
+                                                  x:CompileBindings="False">
+                                        <!-- rule | graph | sha | refs | subject | ai | author | date -->
+                                        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto"
+                                              MinHeight="20">
+                                            <Grid.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="Revert This Commit..."
+                                                              CommandParameter="{Binding Hash}"
+                                                              Command="{Binding DataContext.RevertCommitCommand, ElementName=CommitListBox}"
+                                                              IsVisible="{Binding !IsWorkingTree}"/>
+                                                    <MenuItem Header="Compare from Here…"
+                                                              CommandParameter="{Binding Hash}"
+                                                              Command="{Binding DataContext.StartCompareCommand, ElementName=CommitListBox}"
+                                                              IsVisible="{Binding !IsWorkingTree}"/>
+                                                    <Separator IsVisible="{Binding !IsWorkingTree}"/>
+                                                    <MenuItem Header="Create Tag Here…"
+                                                              CommandParameter="{Binding Hash}"
+                                                              Command="{Binding DataContext.StartCreateTagCommand, ElementName=CommitListBox}"
+                                                              IsVisible="{Binding !IsWorkingTree}"/>
+                                                    <Separator IsVisible="{Binding !IsWorkingTree}"/>
+                                                    <MenuItem Header="Interactive Rebase onto Here…"
+                                                              CommandParameter="{Binding Hash}"
+                                                              Command="{Binding DataContext.StartInteractiveRebaseCommand, ElementName=CommitListBox}"
+                                                              IsVisible="{Binding !IsWorkingTree}"/>
+                                                </ContextMenu>
+                                            </Grid.ContextMenu>
+                                            <!-- Selection rule: 2px accent bar, driven purely by the
+                                                 ListBoxItem:selected style — no viewmodel state needed. -->
+                                            <Border Grid.Column="0"
+                                                    Classes="row-rule"
+                                                    Margin="0,2,8,2"/>
+
+                                            <controls:CommitGraphCell Grid.Column="1"
+                                                Segments="{Binding Segments}"
+                                                Lane="{Binding Lane}"
+                                                TotalLanes="{Binding TotalLanes}"
+                                                IsVisible="{Binding DataContext.IsGraphVisible, ElementName=CommitListBox}"/>
+
+                                            <!-- Dim mono SHA: present for reference, never the thing you read first -->
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding ShortHash}"
+                                                       Classes="mono tertiary"
+                                                       FontSize="{DynamicResource FontSizeLabel}"
+                                                       Margin="6,0,10,0"
+                                                       VerticalAlignment="Center"
+                                                       IsVisible="{Binding !IsWorkingTree}"/>
+
+                                            <!-- Ref pills: one per ref, rather than a joined string -->
+                                            <ItemsControl Grid.Column="3"
+                                                          ItemsSource="{Binding RefNames}"
+                                                          Margin="0,0,8,0"
+                                                          VerticalAlignment="Center">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="4"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="x:String">
+                                                        <Border Classes="ref-pill">
+                                                            <TextBlock Text="{Binding}"/>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- Subject: proportional, primary — the thing you actually scan -->
+                                            <TextBlock Grid.Column="4"
+                                                       Text="{Binding Subject}"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
+
+                                            <!-- AI attribution. Colour is never the only signal: glyph +
+                                                 label + border all carry it, so it survives colour-blindness
+                                                 and a greyscale screenshot. -->
+                                            <Border Grid.Column="5"
+                                                    Classes="badge ai"
+                                                    Margin="10,0,0,0"
+                                                    IsVisible="{Binding IsAiAuthored}"
+                                                    ToolTip.Tip="{Binding AiTooltip}">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <Path Classes="icon ai"
+                                                          Width="9" Height="9"
+                                                          StrokeThickness="2.2"
+                                                          Data="{DynamicResource IconSparkles}"/>
+                                                    <TextBlock Text="{Binding AiAgentName}"
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <TextBlock Grid.Column="6"
+                                                       Text="{Binding AuthorName}"
+                                                       Classes="secondary"
+                                                       FontSize="{DynamicResource FontSizeLabel}"
+                                                       Margin="12,0,0,0"
+                                                       MaxWidth="130"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
+
+                                            <TextBlock Grid.Column="7"
+                                                       Text="{Binding FormattedDate}"
+                                                       Classes="tertiary"
+                                                       FontSize="{DynamicResource FontSizeLabel}"
+                                                       Margin="12,0,4,0"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <Button Content="Load More Commits…"
+                                    Classes="sm"
+                                    Command="{Binding LoadMoreCommitsCommand}"
+                                    IsVisible="{Binding CanLoadMoreCommits}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Bottom"
+                                    Margin="0,0,0,10"/>
+                        </Panel>
+                    </Grid>
+                </Border>
+
+                <!-- Splitter: commit log | detail panel -->
+                <Border Grid.Row="1" Background="{DynamicResource BorderSubtleBrush}"
+                        IsVisible="{Binding IsChromeVisible}"/>
+                <GridSplitter Grid.Row="1"
+                              Classes="hairline-h"
+                              ResizeDirection="Rows"
+                              IsVisible="{Binding IsChromeVisible}"
+                              HorizontalAlignment="Stretch"/>
+
+                <!-- Bottom: Files + Diff side by side ────────────────────── -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <!-- Collapses to 0 in full-screen diff mode -->
+                        <ColumnDefinition Width="{Binding FilesPanelWidth}"/>
+                        <ColumnDefinition Width="1"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Files panel ────────────────────────────────────────
+                         Deliberately NOT bound to IsChromeVisible: review mode
+                         needs this list to move between files. -->
+                    <Border Grid.Column="0" Classes="panel">
+                        <!-- header | commit box | file list or tree | notes -->
+                        <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                            <DockPanel Grid.Row="0">
+                                <TextBlock Classes="panel-header"
+                                           Text="FILES"
+                                           DockPanel.Dock="Left"/>
+                                <StackPanel DockPanel.Dock="Right"
+                                            Orientation="Horizontal"
+                                            Spacing="2"
+                                            Margin="0,6,8,0"
+                                            VerticalAlignment="Center">
+
+                                    <!-- Review-mode toggle sits with the file list, which
+                                         is what you are working through when you want it. -->
+                                    <ToggleButton IsChecked="{Binding IsDiffFullScreen, Mode=TwoWay}"
+                                                  Classes="sm"
+                                                  Padding="5,2"
+                                                  ToolTip.Tip="Review mode — hide the branches and commit graph (F11)">
+                                        <Panel>
+                                            <Path Classes="icon sm"
+                                                  Data="{DynamicResource IconCollapse}"
+                                                  IsVisible="{Binding IsDiffFullScreen}"/>
+                                            <Path Classes="icon sm"
+                                                  Data="{DynamicResource IconExpand}"
+                                                  IsVisible="{Binding !IsDiffFullScreen}"/>
+                                        </Panel>
+                                    </ToggleButton>
+
+                                    <Border Classes="divider" Width="1" Height="14" Margin="3,0"/>
+
+                                    <ToggleButton IsChecked="{Binding IsFileTreeVisible, Mode=TwoWay}"
+                                                  Classes="sm"
+                                                  Padding="5,2"
+                                                  ToolTip.Tip="Group files by folder">
+                                        <Path Classes="icon sm" Data="{DynamicResource IconFolderOpen}"/>
+                                    </ToggleButton>
+
+                                    <!-- Tree-only: one toggle for expand / collapse all -->
+                                    <ToggleButton IsChecked="{Binding IsTreeFullyExpanded, Mode=TwoWay}"
+                                                  Classes="sm"
+                                                  Padding="5,2"
+                                                  IsVisible="{Binding IsFileTreeVisible}"
+                                                  ToolTip.Tip="Expand or collapse all folders">
+                                        <Panel>
+                                            <Path Classes="icon sm"
+                                                  Data="{DynamicResource IconCollapse}"
+                                                  IsVisible="{Binding IsTreeFullyExpanded}"/>
+                                            <Path Classes="icon sm"
+                                                  Data="{DynamicResource IconExpand}"
+                                                  IsVisible="{Binding !IsTreeFullyExpanded}"/>
+                                        </Panel>
+                                    </ToggleButton>
+                                    <ToggleButton IsChecked="{Binding IsNotesPanelVisible, Mode=TwoWay}"
+                                                  Classes="sm"
+                                                  Padding="5,2"
+                                                  ToolTip.Tip="Review notes for the selected file">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <Path Classes="icon sm" Data="{DynamicResource IconFlag}"/>
+                                            <TextBlock Text="{Binding NotedFileCount}"
+                                                       VerticalAlignment="Center"
+                                                       IsVisible="{Binding HasNotedFiles}"/>
+                                        </StackPanel>
+                                    </ToggleButton>
+                                </StackPanel>
+                            </DockPanel>
+
+                            <!-- Commit controls — only when working tree selected.
+                                 Commit is the consequential action here, so it takes
+                                 the accent; Stage All stays quiet beside it. -->
+                            <StackPanel Grid.Row="1"
+                                        IsVisible="{Binding IsWorkingTreeSelected}"
+                                        Margin="12,2,12,10"
+                                        Spacing="8">
+                                <TextBox Classes="commit-msg"
+                                         Watermark="Commit message…"
+                                         Text="{Binding CommitMessage, Mode=TwoWay}"
+                                         AcceptsReturn="False"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button Classes="primary"
+                                            Content="Commit"
+                                            Command="{Binding CommitCommand}"/>
+                                    <Button Classes="sm"
+                                            Content="Stage All"
+                                            Command="{Binding StageAllCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Scrollable file sections.
+                                 Horizontal scrolling is disabled deliberately: with it
+                                 enabled the ScrollViewer measures rows at infinite width,
+                                 so long paths never trim and the +/- counts and staging
+                                 buttons get pushed outside the visible panel. -->
+                            <ScrollViewer Grid.Row="2"
+                                          IsVisible="{Binding IsFlatFileListVisible}"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel>
+
+                                    <!-- STAGED section (working tree only) -->
+                                    <StackPanel x:Name="StagedSection"
+                                                IsVisible="{Binding IsWorkingTreeSelected}">
+                                        <Border Classes="section-header staged">
+                                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                                <TextBlock Grid.Column="0"
+                                                           Classes="strip-label"
+                                                           Text="STAGED"/>
+                                                <Button Grid.Column="1"
+                                                        x:Name="UnstageSelectedButton"
+                                                        Classes="stage-btn"
+                                                        Content="Unstage Sel."
+                                                        VerticalAlignment="Center"/>
+                                                <Button Grid.Column="2"
+                                                        Classes="stage-btn"
+                                                        Content="Unstage All"
+                                                        Command="{Binding UnstageAllCommand}"
+                                                        IsEnabled="{Binding HasStagedFiles}"
+                                                        Margin="6,0,0,0"
+                                                        VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <ListBox x:Name="StagedListBox"
+                                                 SelectionMode="Multiple"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 ItemsSource="{Binding StagedFiles}"
+                                                 SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:FileChangeViewModel"
+                                                              x:CompileBindings="False">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto">
+                                                        <Grid.ContextMenu>
+                                                            <ContextMenu>
+                                                                <MenuItem Header="Blame"
+                                                                          CommandParameter="{Binding Path}"
+                                                                          Command="{Binding DataContext.ShowBlameCommand, ElementName=StagedListBox}"/>
+                                                                <MenuItem Header="History"
+                                                                          CommandParameter="{Binding Path}"
+                                                                          Command="{Binding DataContext.ShowFileHistoryCommand, ElementName=StagedListBox}"/>
+                                                            </ContextMenu>
+                                                        </Grid.ContextMenu>
+                                                        <!-- Grid, not StackPanel: the directory needs a
+                                                             star column so it shrinks and trims instead of
+                                                             overflowing into the +/- counts. -->
+                                                        <!-- The panel is too narrow to show a useful directory
+                                                             (it degrades to "src/…"), so the name gets all the
+                                                             space and the full path lives in the tooltip.
+                                                             A star column is required — Auto cannot shrink, so a
+                                                             long name would overflow into the +/- counts. -->
+                                                        <Grid Grid.Column="0"
+                                                              ColumnDefinitions="Auto,*"
+                                                              VerticalAlignment="Center"
+                                                              ToolTip.Tip="{Binding DisplayPath}">
+                                                            <Border Grid.Column="0" Classes="badge">
+                                                                <TextBlock Text="{Binding StatusLabel}"/>
+                                                            </Border>
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="{Binding FileName}"
+                                                                       Margin="6,0,4,0"
+                                                                       VerticalAlignment="Center"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <Path Grid.Column="1"
+                                                                  Classes="icon sm warn"
+                                                                  Data="{DynamicResource IconFlag}"
+                                                                  HorizontalAlignment="Right"
+                                                                  IsVisible="{Binding HasNote}"
+                                                                  ToolTip.Tip="This file has a review note"/>
+                                                        </Grid>
+                                                        <StackPanel Grid.Column="1"
+                                                                    Orientation="Horizontal"
+                                                                    Spacing="5"
+                                                                    Margin="6,0,0,0"
+                                                                    VerticalAlignment="Center"
+                                                                    IsVisible="{Binding HasLineStats}">
+                                                            <TextBlock Text="{Binding AddedLabel}"
+                                                                       Classes="mono"
+                                                                       FontSize="{DynamicResource FontSizeMicro}"
+                                                                       Foreground="{DynamicResource AddFgBrush}"/>
+                                                            <TextBlock Text="{Binding RemovedLabel}"
+                                                                       Classes="mono"
+                                                                       FontSize="{DynamicResource FontSizeMicro}"
+                                                                       Foreground="{DynamicResource DeleteFgBrush}"/>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2"
+                                                                Classes="stage-btn"
+                                                                Command="{Binding ToggleStagingCommand}"
+                                                                IsVisible="{Binding IsWorkingTreeFile}"
+                                                                ToolTip.Tip="Unstage"
+                                                                Margin="4,0,0,0"
+                                                                VerticalAlignment="Center">
+                                                            <Path Classes="icon sm" Data="{DynamicResource IconMinus}"/>
+                                                        </Button>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </StackPanel>
+
+                                    <!-- UNSTAGED section (working tree only) -->
+                                    <StackPanel x:Name="UnstagedSection"
+                                                IsVisible="{Binding IsWorkingTreeSelected}">
+                                        <Border Classes="section-header unstaged">
+                                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                                <TextBlock Grid.Column="0"
+                                                           Classes="strip-label"
+                                                           Text="UNSTAGED"/>
+                                                <Button Grid.Column="1"
+                                                        x:Name="DiscardSelectedButton"
+                                                        Classes="stage-btn"
+                                                        Content="Discard Sel."
+                                                        Foreground="{DynamicResource DangerFgBrush}"
+                                                        VerticalAlignment="Center"
+                                                        ToolTip.Tip="Discard selected unstaged changes (cannot be undone)"/>
+                                                <Button Grid.Column="2"
+                                                        x:Name="StageSelectedButton"
+                                                        Classes="stage-btn"
+                                                        Content="Stage Sel."
+                                                        Margin="4,0,0,0"
+                                                        VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <ListBox x:Name="UnstagedListBox"
+                                                 SelectionMode="Multiple"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 ItemsSource="{Binding ChangedFiles}"
+                                                 SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:FileChangeViewModel"
+                                                              x:CompileBindings="False">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                                        <Grid.ContextMenu>
+                                                            <ContextMenu>
+                                                                <MenuItem Header="Blame"
+                                                                          CommandParameter="{Binding Path}"
+                                                                          Command="{Binding DataContext.ShowBlameCommand, ElementName=UnstagedListBox}"/>
+                                                                <MenuItem Header="History"
+                                                                          CommandParameter="{Binding Path}"
+                                                                          Command="{Binding DataContext.ShowFileHistoryCommand, ElementName=UnstagedListBox}"/>
+                                                            </ContextMenu>
+                                                        </Grid.ContextMenu>
+                                                        <!-- Grid, not StackPanel: the directory needs a
+                                                             star column so it shrinks and trims instead of
+                                                             overflowing into the +/- counts. -->
+                                                        <!-- The panel is too narrow to show a useful directory
+                                                             (it degrades to "src/…"), so the name gets all the
+                                                             space and the full path lives in the tooltip.
+                                                             A star column is required — Auto cannot shrink, so a
+                                                             long name would overflow into the +/- counts. -->
+                                                        <Grid Grid.Column="0"
+                                                              ColumnDefinitions="Auto,*"
+                                                              VerticalAlignment="Center"
+                                                              ToolTip.Tip="{Binding DisplayPath}">
+                                                            <Border Grid.Column="0" Classes="badge">
+                                                                <TextBlock Text="{Binding StatusLabel}"/>
+                                                            </Border>
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="{Binding FileName}"
+                                                                       Margin="6,0,4,0"
+                                                                       VerticalAlignment="Center"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <Path Grid.Column="1"
+                                                                  Classes="icon sm warn"
+                                                                  Data="{DynamicResource IconFlag}"
+                                                                  HorizontalAlignment="Right"
+                                                                  IsVisible="{Binding HasNote}"
+                                                                  ToolTip.Tip="This file has a review note"/>
+                                                        </Grid>
+                                                        <StackPanel Grid.Column="1"
+                                                                    Orientation="Horizontal"
+                                                                    Spacing="5"
+                                                                    Margin="6,0,0,0"
+                                                                    VerticalAlignment="Center"
+                                                                    IsVisible="{Binding HasLineStats}">
+                                                            <TextBlock Text="{Binding AddedLabel}"
+                                                                       Classes="mono"
+                                                                       FontSize="{DynamicResource FontSizeMicro}"
+                                                                       Foreground="{DynamicResource AddFgBrush}"/>
+                                                            <TextBlock Text="{Binding RemovedLabel}"
+                                                                       Classes="mono"
+                                                                       FontSize="{DynamicResource FontSizeMicro}"
+                                                                       Foreground="{DynamicResource DeleteFgBrush}"/>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2"
+                                                                x:Name="DiscardFileButton"
+                                                                Classes="stage-btn"
+                                                                Command="{Binding DataContext.DiscardSelectedCommand, ElementName=UnstagedListBox}"
+                                                                IsVisible="{Binding IsWorkingTreeFile}"
+                                                                ToolTip.Tip="Discard changes"
+                                                                Margin="4,0,0,0"
+                                                                VerticalAlignment="Center">
+                                                            <Path Classes="icon sm danger" Data="{DynamicResource IconClose}"/>
+                                                        </Button>
+                                                        <Button Grid.Column="3"
+                                                                Classes="stage-btn"
+                                                                Command="{Binding ToggleStagingCommand}"
+                                                                IsVisible="{Binding IsWorkingTreeFile}"
+                                                                ToolTip.Tip="Stage"
+                                                                Margin="4,0,0,0"
+                                                                VerticalAlignment="Center">
+                                                            <Path Classes="icon sm" Data="{DynamicResource IconPlus}"/>
+                                                        </Button>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </StackPanel>
+
+                                    <!-- CONFLICTS section (working tree only, when conflicts exist) -->
+                                    <StackPanel IsVisible="{Binding HasConflicts}">
+                                        <Border Classes="section-header conflict">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0"
+                                                           Classes="strip-label"
+                                                           Text="CONFLICTS"
+                                                           Foreground="{DynamicResource DangerFgBrush}"/>
+                                                <Button Grid.Column="1"
+                                                        Classes="stage-btn"
+                                                        Content="Abort Merge"
+                                                        Foreground="{DynamicResource DangerFgBrush}"
+                                                        Command="{Binding AbortMergeCommand}"
+                                                        VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <ListBox Background="Transparent"
+                                                 BorderThickness="0"
+                                                 ItemsSource="{Binding ConflictedFiles}"
+                                                 SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:FileChangeViewModel">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Grid.Column="0"
+                                                                   Text="{Binding DisplayText}"
+                                                                   Foreground="{DynamicResource DangerFgBrush}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center"/>
+                                                        <Button Grid.Column="1"
+                                                                Classes="stage-btn"
+                                                                Content="Resolve"
+                                                                Foreground="{DynamicResource WarnFgBrush}"
+                                                                x:CompileBindings="False"
+                                                                CommandParameter="{Binding Path}"
+                                                                Command="{Binding DataContext.ShowConflictResolverCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                                ToolTip.Tip="Open conflict resolver"
+                                                                Margin="4,0,0,0"
+                                                                VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </StackPanel>
+
+                                    <!-- CHANGED FILES (commit view) -->
+                                    <ListBox x:Name="CommitFilesListBox"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             IsVisible="{Binding !IsWorkingTreeSelected}"
+                                             ItemsSource="{Binding ChangedFiles}"
+                                             SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                                             ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:FileChangeViewModel"
+                                                          x:CompileBindings="False">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <Grid.ContextMenu>
+                                                        <ContextMenu>
+                                                            <MenuItem Header="Blame"
+                                                                      CommandParameter="{Binding Path}"
+                                                                      Command="{Binding DataContext.ShowBlameCommand, ElementName=CommitFilesListBox}"/>
+                                                            <MenuItem Header="History"
+                                                                      CommandParameter="{Binding Path}"
+                                                                      Command="{Binding DataContext.ShowFileHistoryCommand, ElementName=CommitFilesListBox}"/>
+                                                        </ContextMenu>
+                                                    </Grid.ContextMenu>
+                                                    <Grid Grid.Column="0"
+                                                          ColumnDefinitions="Auto,*"
+                                                          VerticalAlignment="Center"
+                                                          ToolTip.Tip="{Binding DisplayPath}">
+                                                        <Border Grid.Column="0" Classes="badge">
+                                                            <TextBlock Text="{Binding StatusLabel}"/>
+                                                        </Border>
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding FileName}"
+                                                                   Margin="6,0,4,0"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                    </Grid>
+                                                    <StackPanel Grid.Column="1"
+                                                                Orientation="Horizontal"
+                                                                Spacing="5"
+                                                                Margin="6,0,0,0"
+                                                                VerticalAlignment="Center"
+                                                                IsVisible="{Binding HasLineStats}">
+                                                        <TextBlock Text="{Binding AddedLabel}"
+                                                                   Classes="mono"
+                                                                   FontSize="{DynamicResource FontSizeMicro}"
+                                                                   Foreground="{DynamicResource AddFgBrush}"/>
+                                                        <TextBlock Text="{Binding RemovedLabel}"
+                                                                   Classes="mono"
+                                                                   FontSize="{DynamicResource FontSizeMicro}"
+                                                                   Foreground="{DynamicResource DeleteFgBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- ── Folder tree (alternative to the flat list) ──────
+                                 Keeps the STAGED / UNSTAGED sections and every staging
+                                 action; only the file listing inside each section
+                                 changes from a flat list to a tree. -->
+                            <ScrollViewer Grid.Row="2"
+                                          IsVisible="{Binding IsFileTreeVisible}"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel>
+
+                                    <!-- CONFLICTS -->
+                                    <StackPanel IsVisible="{Binding HasConflicts}">
+                                        <Border Classes="section-header conflict">
+                                            <TextBlock Classes="strip-label" Text="CONFLICTS"/>
+                                        </Border>
+                                        <TreeView x:Name="ConflictedTreeView" ItemsSource="{Binding ConflictedTree}"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  ItemTemplate="{StaticResource FileTreeTemplate}"
+                                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                                    </StackPanel>
+
+                                    <!-- STAGED -->
+                                    <StackPanel IsVisible="{Binding IsWorkingTreeSelected}">
+                                        <Border Classes="section-header staged">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0"
+                                                           Classes="strip-label"
+                                                           Text="STAGED"/>
+                                                <Button Grid.Column="1"
+                                                        Classes="stage-btn"
+                                                        Content="Unstage All"
+                                                        Command="{Binding UnstageAllCommand}"
+                                                        IsEnabled="{Binding HasStagedFiles}"
+                                                        VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <TreeView x:Name="StagedTreeView" ItemsSource="{Binding StagedTree}"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  ItemTemplate="{StaticResource FileTreeTemplate}"
+                                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                                    </StackPanel>
+
+                                    <!-- UNSTAGED -->
+                                    <StackPanel IsVisible="{Binding IsWorkingTreeSelected}">
+                                        <Border Classes="section-header unstaged">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0"
+                                                           Classes="strip-label"
+                                                           Text="UNSTAGED"/>
+                                                <Button Grid.Column="1"
+                                                        Classes="stage-btn"
+                                                        Content="Stage All"
+                                                        Command="{Binding StageAllCommand}"
+                                                        VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <TreeView x:Name="UnstagedTreeView" ItemsSource="{Binding UnstagedTree}"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  ItemTemplate="{StaticResource FileTreeTemplate}"
+                                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                                    </StackPanel>
+
+                                    <!-- Commit files (historical commit selected) -->
+                                    <TreeView x:Name="CommitFilesTreeView" ItemsSource="{Binding UnstagedTree}"
+                                              IsVisible="{Binding !IsWorkingTreeSelected}"
+                                              Background="Transparent"
+                                              BorderThickness="0"
+                                              ItemTemplate="{StaticResource FileTreeTemplate}"
+                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- ── Review notes for the selected file ───────────── -->
+                            <Border Grid.Row="3"
+                                    Background="{DynamicResource BgSurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="0,1,0,0"
+                                    Padding="10,8"
+                                    IsVisible="{Binding IsNotesPanelVisible}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="panel-header"
+                                               Margin="0"
+                                               Text="REVIEW NOTE"/>
+                                    <TextBox Text="{Binding CurrentNote, Mode=TwoWay}"
+                                             Watermark="Notes on this file — saved automatically"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                             MinHeight="80"
+                                             MaxHeight="180"
+                                             IsEnabled="{Binding DiffFilePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- Splitter: files | diff — stays in review mode with the list -->
+                    <Border Grid.Column="1" Background="{DynamicResource BorderSubtleBrush}"/>
+                    <GridSplitter Grid.Column="1"
+                                  Classes="hairline"
+                                  ResizeDirection="Columns"
+                                  VerticalAlignment="Stretch"/>
+
+                    <!-- Diff / Blame Viewer ────────────────────────────── -->
+                    <Border Grid.Column="2" Background="{DynamicResource EditorBgBrush}">
+                        <!-- header | linked issues | staging strip | staging notice | viewer.
+                             Each strip gets its own row: they can be visible at the same
+                             time, so sharing a row would overlap them. -->
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+                            <Border Grid.Row="0" Classes="pane-header">
+                                <DockPanel>
+                                    <StackPanel Orientation="Horizontal"
+                                                DockPanel.Dock="Left"
+                                                Spacing="8">
+                                        <Path Classes="icon sm" Data="{DynamicResource IconFileDiff}"
+                                              IsVisible="{Binding !IsBlameVisible}"/>
+                                        <Path Classes="icon sm" Data="{DynamicResource IconHistory}"
+                                              IsVisible="{Binding IsBlameVisible}"/>
+                                        <TextBlock Classes="strip-label"
+                                                   Text="DIFF"
+                                                   IsVisible="{Binding !IsBlameVisible}"/>
+                                        <TextBlock Classes="strip-label"
+                                                   Text="BLAME"
+                                                   IsVisible="{Binding IsBlameVisible}"/>
+                                    </StackPanel>
+                                    <Button DockPanel.Dock="Right"
+                                            Classes="subtle sm"
+                                            Content="Close Blame"
+                                            Command="{Binding CloseBlameCommand}"
+                                            IsVisible="{Binding IsBlameVisible}"/>
+
+                                    <!-- ── Diff controls ───────────────────────────── -->
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Orientation="Horizontal"
+                                                Spacing="3"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding !IsBlameVisible}">
+
+                                        <!-- Change navigation -->
+                                        <Button Classes="subtle sm icon-only"
+                                                Command="{Binding PreviousChangeCommand}"
+                                                ToolTip.Tip="Previous change (F7)">
+                                            <Path Classes="icon sm" Data="{DynamicResource IconChevronUp}"/>
+                                        </Button>
+                                        <TextBlock Text="{Binding ChangePositionLabel}"
+                                                   Classes="caption mono"
+                                                   VerticalAlignment="Center"
+                                                   MinWidth="34"
+                                                   TextAlignment="Center"/>
+                                        <Button Classes="subtle sm icon-only"
+                                                Command="{Binding NextChangeCommand}"
+                                                ToolTip.Tip="Next change (F8)">
+                                            <Path Classes="icon sm" Data="{DynamicResource IconChevronDown}"/>
+                                        </Button>
+
+                                        <Border Classes="divider" Width="1" Height="16" Margin="5,0"/>
+
+                                        <!-- Context sizing, focused mode only -->
+                                        <Button Classes="subtle sm icon-only"
+                                                Command="{Binding DecreaseDiffContextCommand}"
+                                                IsEnabled="{Binding !IsFullFileDiff}"
+                                                ToolTip.Tip="Less context">
+                                            <Path Classes="icon sm" Data="{DynamicResource IconMinus}"/>
+                                        </Button>
+                                        <TextBlock Text="{Binding DiffContextLines}"
+                                                   Classes="caption mono"
+                                                   VerticalAlignment="Center"
+                                                   MinWidth="16"
+                                                   TextAlignment="Center"
+                                                   IsVisible="{Binding !IsFullFileDiff}"/>
+                                        <Button Classes="subtle sm icon-only"
+                                                Command="{Binding IncreaseDiffContextCommand}"
+                                                IsEnabled="{Binding !IsFullFileDiff}"
+                                                ToolTip.Tip="More context">
+                                            <Path Classes="icon sm" Data="{DynamicResource IconPlus}"/>
+                                        </Button>
+
+                                        <Border Classes="divider" Width="1" Height="16" Margin="5,0"/>
+
+                                        <ToggleButton IsChecked="{Binding IsFullFileDiff, Mode=TwoWay}"
+                                                      Classes="sm"
+                                                      Content="Full file"
+                                                      ToolTip.Tip="Show the whole file with changes highlighted in place"/>
+
+                                        <ToggleButton IsChecked="{Binding CollapseUnchangedRegions, Mode=TwoWay}"
+                                                      Classes="sm"
+                                                      Content="Collapse"
+                                                      IsVisible="{Binding CanCollapseUnchanged}"
+                                                      ToolTip.Tip="Fold long runs of unchanged lines behind an expander"/>
+
+                                        <ToggleButton IsChecked="{Binding IgnoreWhitespace, Mode=TwoWay}"
+                                                      Classes="sm"
+                                                      Content="Ignore WS"
+                                                      ToolTip.Tip="Hide whitespace-only changes. Whole-file staging still works and includes them; only per-hunk staging is unavailable."/>
+
+                                        <Border Classes="divider" Width="1" Height="16" Margin="5,0"/>
+
+                                        <Button Classes="subtle sm icon-only"
+                                                Command="{Binding ToggleDiffFullScreenCommand}"
+                                                IsVisible="{Binding !IsDiffFullScreen}"
+                                                ToolTip.Tip="Focus the diff, hiding everything else (F11)">
+                                            <Path Classes="icon sm" Data="{DynamicResource IconExpand}"/>
+                                        </Button>
+                                        <Button Classes="subtle sm icon-only"
+                                                Command="{Binding ToggleDiffFullScreenCommand}"
+                                                IsVisible="{Binding IsDiffFullScreen}"
+                                                ToolTip.Tip="Restore the other panels (F11 or Esc)">
+                                            <Path Classes="icon sm" Data="{DynamicResource IconCollapse}"/>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <!-- Stats: green additions, red removals -->
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Orientation="Horizontal"
+                                                Spacing="7"
+                                                Margin="0,0,10,0"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding !IsBlameVisible}">
+                                        <TextBlock Text="{Binding DiffAddedCount, StringFormat='+{0}'}"
+                                                   Classes="mono"
+                                                   FontSize="{DynamicResource FontSizeLabel}"
+                                                   Foreground="{DynamicResource AddFgBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DiffRemovedCount, StringFormat='−{0}'}"
+                                                   Classes="mono"
+                                                   FontSize="{DynamicResource FontSizeLabel}"
+                                                   Foreground="{DynamicResource DeleteFgBrush}"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <TextBlock Text="{Binding DiffFilePath}"
+                                               Classes="mono tertiary"
+                                               FontSize="{DynamicResource FontSizeLabel}"
+                                               VerticalAlignment="Center"
+                                               Margin="10,0,8,0"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </DockPanel>
+                            </Border>
+
+                            <!-- Linked issues (user-triggered fetch). The strip only
+                                 occupies space when there is actually an action or a
+                                 result to show. -->
+                            <Border Grid.Row="1"
+                                    Padding="12,6"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    IsVisible="{Binding !IsWorkingTreeSelected}">
+                                <Button Classes="subtle sm"
+                                        Command="{Binding FetchLinkedIssuesCommand}"
+                                        IsVisible="{Binding !LinkedIssues.Count}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Path Classes="icon sm" Data="{DynamicResource IconFetch}"/>
+                                        <TextBlock Text="Fetch Linked Issues" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </Border>
+                            <ItemsControl Grid.Row="1"
+                                          ItemsSource="{Binding LinkedIssues}"
+                                          IsVisible="{Binding !!LinkedIssues.Count}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:IssueViewModel">
+                                        <Border Background="{DynamicResource InfoBgBrush}"
+                                                Padding="12,5"
+                                                Margin="0,0,0,1">
+                                            <DockPanel>
+                                                <Border DockPanel.Dock="Left"
+                                                        Classes="badge"
+                                                        Background="{DynamicResource BgRaisedBrush}"
+                                                        Margin="0,0,8,0">
+                                                    <TextBlock Text="{Binding State}"
+                                                               Foreground="{DynamicResource InfoFgBrush}"/>
+                                                </Border>
+                                                <TextBlock Text="{Binding DisplayText}"
+                                                           Foreground="{DynamicResource InfoFgBrush}"
+                                                           FontSize="{DynamicResource FontSizeLabel}"
+                                                           VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- ── Focused staging strip ───────────────────────────
+                                 Full-screen mode hides the file lists, so stage/unstage
+                                 and file navigation have to live here or the mode would
+                                 be read-only and you'd be stuck on one file. -->
+                            <Border Grid.Row="2"
+                                    Background="{DynamicResource BgRaisedBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="12,7"
+                                    IsVisible="{Binding IsDiffFullScreen}">
+                                <DockPanel LastChildFill="True">
+
+                                    <!-- File stepping -->
+                                    <StackPanel DockPanel.Dock="Left"
+                                                Orientation="Horizontal"
+                                                Spacing="3"
+                                                VerticalAlignment="Center">
+                                        <Button Classes="subtle sm icon-only"
+                                                Command="{Binding PreviousFileCommand}"
+                                                ToolTip.Tip="Previous file">
+                                            <Path Classes="icon sm" Data="{DynamicResource IconChevronUp}"/>
+                                        </Button>
+                                        <TextBlock Text="{Binding CurrentFilePositionLabel}"
+                                                   Classes="caption mono"
+                                                   MinWidth="38"
+                                                   TextAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                        <Button Classes="subtle sm icon-only"
+                                                Command="{Binding NextFileCommand}"
+                                                ToolTip.Tip="Next file">
+                                            <Path Classes="icon sm" Data="{DynamicResource IconChevronDown}"/>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <!-- Staging actions -->
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Orientation="Horizontal"
+                                                Spacing="6"
+                                                VerticalAlignment="Center">
+                                        <Button Classes="sm"
+                                                Content="{Binding StageCurrentFileLabel}"
+                                                Command="{Binding ToggleStagingForCurrentFileCommand}"
+                                                IsEnabled="{Binding CanToggleStagingForCurrentFile}"/>
+                                        <Button Classes="sm"
+                                                Content="Stage all"
+                                                Command="{Binding StageAllCommand}"
+                                                IsVisible="{Binding IsWorkingTreeSelected}"/>
+                                        <Button Classes="sm"
+                                                Content="Unstage all"
+                                                Command="{Binding UnstageAllCommand}"
+                                                IsEnabled="{Binding HasStagedFiles}"
+                                                IsVisible="{Binding IsWorkingTreeSelected}"/>
+                                        <Button Classes="primary sm"
+                                                Content="Commit"
+                                                Command="{Binding CommitCommand}"
+                                                IsVisible="{Binding IsWorkingTreeSelected}"
+                                                ToolTip.Tip="Commit staged changes (Ctrl+Enter)"/>
+                                    </StackPanel>
+
+                                    <!-- Current file -->
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8"
+                                                Margin="12,0"
+                                                VerticalAlignment="Center">
+                                        <Border Classes="badge"
+                                                IsVisible="{Binding SelectedFile, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <TextBlock Text="{Binding SelectedFile.StatusLabel}"/>
+                                        </Border>
+                                        <TextBlock Text="{Binding DiffFilePath}"
+                                                   Classes="mono"
+                                                   FontSize="{DynamicResource FontSizeLabel}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+
+                            <!-- Why staging is unavailable, rather than silently
+                                 hiding the buttons and leaving the user confused -->
+                            <Border Grid.Row="3"
+                                    Background="{DynamicResource InfoBgBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="12,6"
+                                    IsVisible="{Binding !CanStageFromDiff}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Path Classes="icon sm" Data="{DynamicResource IconInfo}"
+                                          Stroke="{DynamicResource InfoFgBrush}"/>
+                                    <TextBlock Text="{Binding DiffStagingBlockedReason}"
+                                               Foreground="{DynamicResource InfoFgBrush}"
+                                               FontSize="{DynamicResource FontSizeLabel}"
+                                               VerticalAlignment="Center"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Diff view (default) -->
+                            <controls:DiffViewer Grid.Row="4"
+                                                 x:Name="DiffViewerControl"
+                                                 Diff="{Binding CurrentDiff}"
+                                                 FilePath="{Binding DiffFilePath}"
+                                                 HunkViewModels="{Binding DiffHunks}"
+                                                 IsWorkingTree="{Binding IsWorkingTreeSelected}"
+                                                 CanStage="{Binding CanStageFromDiff}"
+                                                 CollapseUnchanged="{Binding ShouldCollapseUnchanged}"
+                                                 IsVisible="{Binding !IsBlameVisible}"/>
+
+                            <!-- Blame view (alternative) -->
+                            <controls:BlameViewer x:Name="BlameViewerControl"
+                                                  Grid.Row="4"
+                                                  BlameData="{Binding BlameData}"
+                                                  FilePath="{Binding BlameFilePath}"
+                                                  IsVisible="{Binding IsBlameVisible}"/>
+
+                            <!-- Empty state, declared last so it paints over the
+                                 (opaque) editor surface when nothing is selected -->
+                            <Border Grid.Row="2"
+                                    Background="{DynamicResource EditorBgBrush}"
+                                    IsVisible="{Binding DiffFilePath, Converter={x:Static StringConverters.IsNullOrEmpty}}">
+                                <StackPanel Classes="empty-state">
+                                    <Path Classes="icon" Data="{DynamicResource IconFileDiff}"/>
+                                    <TextBlock Classes="empty-title" Text="No file selected"/>
+                                    <TextBlock Classes="empty-body"
+                                               Text="Pick a commit, then a file, to see its line-by-line diff."/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- File History overlay panel ─────────────────────────── -->
+                <Border Grid.Row="0" Grid.RowSpan="3"
+                        Classes="scrim"
+                        IsVisible="{Binding IsFileHistoryVisible}"
+                        ZIndex="50">
+                    <Border Classes="card"
+                            Margin="40,20"
+                            Padding="0"
+                            ClipToBounds="True">
+                        <Grid RowDefinitions="Auto,*">
+                            <!-- Header -->
+                            <Border Grid.Row="0"
+                                    Background="{DynamicResource BgRaisedBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="16,12">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right"
+                                            Classes="subtle sm"
+                                            Content="Close"
+                                            Command="{Binding CloseFileHistoryCommand}"/>
+                                    <TextBlock Classes="subtitle"
+                                               VerticalAlignment="Center">
+                                        <Run Text="History:"/>
+                                        <Run Text="{Binding FileHistoryPath}"
+                                             Foreground="{DynamicResource TextTertiaryBrush}"/>
+                                    </TextBlock>
+                                </DockPanel>
+                            </Border>
+                            <!-- Commit list -->
+                            <ListBox Grid.Row="1"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     ItemsSource="{Binding FileHistoryCommits}"
+                                     SelectedItem="{Binding SelectedFileHistoryCommit, Mode=TwoWay}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:CommitRowViewModel">
+                                        <Grid ColumnDefinitions="66,*,Auto,120,150" Margin="4,2">
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding ShortHash}"
+                                                       Classes="sha"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Subject}"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
+                                            <Border Grid.Column="2"
+                                                    Classes="badge ai"
+                                                    Margin="10,0,0,0"
+                                                    IsVisible="{Binding IsAiAuthored}"
+                                                    ToolTip.Tip="{Binding AiTooltip}">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <Path Classes="icon ai"
+                                                          Width="9" Height="9"
+                                                          StrokeThickness="2.2"
+                                                          Data="{DynamicResource IconSparkles}"/>
+                                                    <TextBlock Text="{Binding AiAgentName}"
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding AuthorName}"
+                                                       Classes="secondary"
+                                                       FontSize="{DynamicResource FontSizeLabel}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"
+                                                       Margin="12,0,0,0"/>
+                                            <TextBlock Grid.Column="4"
+                                                       Text="{Binding FormattedDate}"
+                                                       Classes="tertiary"
+                                                       FontSize="{DynamicResource FontSizeLabel}"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- ── Row 4: Interactive Terminal (ConPTY native) ─────────────── -->
+        <Border Grid.Row="4"
+                Background="{DynamicResource BgBaseBrush}"
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                IsVisible="{Binding IsConsoleVisible}"
+                Height="250">
+            <Grid RowDefinitions="Auto,*,Auto">
+                <Border Grid.Row="0" Classes="pane-header">
+                    <DockPanel LastChildFill="True">
+                        <StackPanel Orientation="Horizontal"
+                                    DockPanel.Dock="Left"
+                                    Spacing="8">
+                            <Path Classes="icon sm" Data="{DynamicResource IconTerminal}"/>
+                            <TextBlock Classes="strip-label" Text="TERMINAL"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding TerminalStatus}"
+                                   Foreground="{DynamicResource DangerFgBrush}"
+                                   FontSize="{DynamicResource FontSizeLabel}"
+                                   FontFamily="{DynamicResource MonoFontFamily}"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0,8,0"
+                                   TextTrimming="CharacterEllipsis"
+                                   IsVisible="{Binding TerminalStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    </DockPanel>
+                </Border>
+                <!-- Terminal output (ANSI colour rendered) -->
+                <ScrollViewer Grid.Row="1"
+                              x:Name="TerminalScrollViewer"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto"
+                              Background="{DynamicResource BgBaseBrush}">
+                    <SelectableTextBlock x:Name="TerminalOutput"
+                                         FontFamily="{DynamicResource MonoFontFamily}"
+                                         FontSize="{DynamicResource FontSizeCode}"
+                                         Foreground="{DynamicResource TextPrimaryBrush}"
+                                         Padding="12,8"
+                                         TextWrapping="NoWrap"/>
+                </ScrollViewer>
+                <!-- Terminal input -->
+                <TextBox Grid.Row="2"
+                         x:Name="TerminalInput"
+                         Classes="mono"
+                         Background="{DynamicResource BgSunkenBrush}"
+                         BorderBrush="{DynamicResource BorderDefaultBrush}"
+                         BorderThickness="0,1,0,0"
+                         CornerRadius="0"
+                         Padding="12,8"
+                         Watermark="Type command and press Enter…"
+                         AcceptsReturn="False"/>
+            </Grid>
+        </Border>
+
+        <!-- ── AI session review overlay ─────────────────────────────────── -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="140"
+                Classes="scrim"
+                IsVisible="{Binding IsAiReviewVisible}">
+            <Border Classes="card"
+                    Margin="40"
+                    ClipToBounds="True"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,14,12,10">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                            <Path Classes="icon lg ai" Data="{StaticResource IconSparkles}"/>
+                            <StackPanel Spacing="1">
+                                <TextBlock Text="AI Review" Classes="subtitle"/>
+                                <TextBlock Text="{Binding AiSummaryLabel}" Classes="caption"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Classes="subtle icon-only"
+                                ToolTip.Tip="Close (Esc)"
+                                Command="{Binding ToggleAiReviewCommand}">
+                            <Path Classes="icon" Data="{StaticResource IconClose}"/>
+                        </Button>
+                    </Grid>
+                    <controls:AiReviewPanel Grid.Row="1"/>
+                </Grid>
+            </Border>
+        </Border>
+
+        <!-- ── Repository quick switcher (Ctrl+P) ────────────────────────── -->
+        <controls:RepoQuickSwitcher Grid.Row="0" Grid.RowSpan="6"
+                                    ZIndex="180"
+                                    IsVisible="{Binding IsQuickSwitchVisible}"/>
+
+        <!-- ── Keyboard shortcuts overlay ────────────────────────────────── -->
+        <Border x:Name="ShortcutsOverlay"
+                Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="150"
+                Classes="scrim"
+                IsVisible="False">
+            <controls:KeyboardShortcutsPanel x:Name="ShortcutsPanel"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- ── Conflict resolver overlay ─────────────────────────────────── -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="130"
+                Classes="scrim"
+                IsVisible="{Binding IsConflictResolverVisible}">
+            <controls:ConflictResolver HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        Margin="24"/>
+        </Border>
+
+        <!-- ── Pull Requests panel overlay ────────────────────────────────── -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="110"
+                Classes="scrim"
+                IsVisible="{Binding IsPrPanelVisible}">
+            <Border Classes="card"
+                    MaxWidth="600"
+                    MaxHeight="500"
+                    ClipToBounds="True"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <controls:PullRequestPanel/>
+            </Border>
+        </Border>
+
+        <!-- ── Create PR dialog overlay ──────────────────────────────────── -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="135"
+                Classes="scrim"
+                IsVisible="{Binding IsCreatePrVisible}">
+            <controls:CreatePrDialog HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- ── Settings panel overlay ──────────────────────────────────────── -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="120"
+                Classes="scrim"
+                IsVisible="{Binding IsSettingsVisible}">
+            <controls:SettingsPanel HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- ── Interactive Rebase panel overlay ────────────────────────────── -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="130"
+                Classes="scrim"
+                IsVisible="{Binding IsRebaseVisible}">
+            <controls:RebasePanel HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- ── Toast notifications overlay ────────────────────────────────── -->
+        <controls:ToastHost x:Name="ToastHost"
+                            Grid.Row="0" Grid.RowSpan="6"
+                            ZIndex="200"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Margin="0,8,16,0"
+                            IsHitTestVisible="True"/>
+
+        <!-- ── Confirmation dialog overlay ───────────────────────────────── -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="100"
+                Classes="scrim"
+                IsVisible="{Binding IsConfirmDialogVisible}">
+            <Border Classes="card"
+                    Padding="{DynamicResource PadDialog}"
+                    MaxWidth="480"
+                    MaxHeight="320"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="{Binding ConfirmDialogTitle}"
+                               Classes="subtitle"/>
+                    <TextBlock Text="{Binding ConfirmDialogMessage}"
+                               Classes="secondary"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap"
+                               MaxWidth="420"/>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="10"
+                                HorizontalAlignment="Right"
+                                Margin="0,8,0,0">
+                        <Button Classes="subtle"
+                                Content="Cancel"
+                                Command="{Binding ConfirmDialogNoCommand}"/>
+                        <Button Classes="danger"
+                                Content="Confirm"
+                                Command="{Binding ConfirmDialogYesCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+
+        <!-- ── Row 5: Status Bar ──────────────────────────────────────────── -->
+        <Border Grid.Row="5"
+                Classes="chrome"
+                BorderThickness="0,1,0,0"
+                Padding="12,6">
+            <DockPanel LastChildFill="True">
+
+                <StackPanel DockPanel.Dock="Left"
+                            Orientation="Horizontal"
+                            Spacing="7">
+                    <Path Classes="icon sm accent" Data="{DynamicResource IconBranch}"/>
+                    <TextBlock Text="{Binding CurrentBranch}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <TextBlock DockPanel.Dock="Left"
+                           Margin="20,0,0,0"
+                           VerticalAlignment="Center"
+                           Classes="secondary">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}{0} pending change(s)">
+                            <Binding Path="PendingChangesCount"/>
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+
+                <!-- Was #6060A0 on #1A1A2C ≈ 3.0:1 at 11px — below the AA floor -->
+                <TextBlock DockPanel.Dock="Right"
+                           Text="{Binding StatusMessage}"
+                           Classes="secondary"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Right"
+                           TextTrimming="CharacterEllipsis"/>
+
+                <!-- Rebase in-progress buttons -->
+                <StackPanel DockPanel.Dock="Left"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            Margin="20,0,0,0"
+                            IsVisible="{Binding IsRebaseInProgress}">
+                    <Border Classes="badge warn">
+                        <TextBlock Text="REBASE IN PROGRESS"/>
+                    </Border>
+                    <Button Classes="sm"
+                            Content="Continue"
+                            Command="{Binding ContinueRebaseCommand}"/>
+                    <Button Classes="sm"
+                            Content="Skip"
+                            Command="{Binding SkipRebaseCommand}"/>
+                    <Button Classes="danger sm"
+                            Content="Abort"
+                            Command="{Binding AbortRebaseCommand}"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+    </Grid>
+</Window>

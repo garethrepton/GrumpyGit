@@ -1,0 +1,125 @@
+# =============================================================================
+# GrumpyGit .gitignore
+# .NET 9 / Avalonia / Rider / ReSharper
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# .NET Build Output
+# -----------------------------------------------------------------------------
+[Bb]in/
+[Oo]bj/
+out/
+publish/
+
+# MSBuild binary logs
+*.binlog
+
+# User-specific build settings
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# -----------------------------------------------------------------------------
+# Visual Studio
+# -----------------------------------------------------------------------------
+.vs/
+*.rsuser
+*.vsp
+*.vspx
+
+# -----------------------------------------------------------------------------
+# VS Code (settings only; keep extensions and launch config)
+# -----------------------------------------------------------------------------
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/*.code-workspace
+
+# Intentionally NOT ignored (keep in source control):
+#   .vscode/extensions.json
+#   .vscode/launch.json
+
+# -----------------------------------------------------------------------------
+# JetBrains Rider / ReSharper
+# -----------------------------------------------------------------------------
+.idea/
+_ReSharper*/
+*.DotSettings.user
+*.sln.iml
+
+# -----------------------------------------------------------------------------
+# NuGet
+# -----------------------------------------------------------------------------
+packages/
+*.nupkg
+*.snupkg
+project.lock.json
+project.assets.json
+.nuget/
+
+# Intentionally NOT ignored (keep in source control if present):
+#   packages.lock.json
+
+# -----------------------------------------------------------------------------
+# Avalonia Designer / Code Generation
+# -----------------------------------------------------------------------------
+# Generated Avalonia XAML code-behind and designer artefacts
+**/*.g.cs
+**/*.g.i.cs
+*.xaml.cs.bak
+avalonia-generated/
+
+# -----------------------------------------------------------------------------
+# Test Results & Coverage
+# -----------------------------------------------------------------------------
+TestResults/
+coverage/
+*.trx
+*.coverage
+*.coveragexml
+lcov.info
+
+# -----------------------------------------------------------------------------
+# Secrets & Environment Configuration
+# -----------------------------------------------------------------------------
+.env
+*.env
+appsettings.local.json
+appsettings.*.local.json
+secrets.json
+**/*secrets*.json
+
+# -----------------------------------------------------------------------------
+# OS-Generated Files
+# -----------------------------------------------------------------------------
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# -----------------------------------------------------------------------------
+# Claude Code
+# -----------------------------------------------------------------------------
+.claude/
+
+# -----------------------------------------------------------------------------
+# Temporary & Crash Files
+# -----------------------------------------------------------------------------
+*.tmp
+*.temp
+*.swp
+*.log
+crash-*.txt

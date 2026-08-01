@@ -1,0 +1,112 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GrumpyGit.App.ViewModels"
+             xmlns:models="using:GrumpyGit.Core.Models"
+             x:Class="GrumpyGit.App.Controls.RebasePanel"
+             x:DataType="vm:MainWindowViewModel">
+
+    <Border Classes="card"
+            Padding="{DynamicResource PadDialog}"
+            MinWidth="620"
+            MaxWidth="800"
+            MaxHeight="560"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10">
+                <Path Classes="icon lg accent" Data="{DynamicResource IconHistory}"/>
+                <TextBlock Classes="title" VerticalAlignment="Center">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="Interactive Rebase onto {0}">
+                            <Binding Path="RebaseOntoDisplay"/>
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+            </StackPanel>
+
+            <TextBlock Grid.Row="1"
+                       Classes="tertiary"
+                       Margin="0,6,0,14"
+                       Text="Drag to reorder. Choose an action for each commit."/>
+
+            <!-- Commit list -->
+            <Border Grid.Row="2"
+                    Background="{DynamicResource BgSunkenBrush}"
+                    CornerRadius="{DynamicResource RadiusMd}"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                    BorderThickness="1"
+                    Padding="0"
+                    Margin="0,0,0,18">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              MaxHeight="360">
+                    <ListBox Background="Transparent"
+                             BorderThickness="0"
+                             ItemsSource="{Binding RebaseEntries}"
+                             x:Name="RebaseListBox">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RebaseEntryViewModel">
+                                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto"
+                                      Margin="2,1">
+                                    <!-- Move Up: a real chevron, not a caret character -->
+                                    <Button Grid.Column="0"
+                                            Classes="subtle icon-only"
+                                            Margin="0,0,1,0"
+                                            x:CompileBindings="False"
+                                            CommandParameter="{Binding}"
+                                            Command="{Binding DataContext.MoveRebaseEntryUpCommand, ElementName=RebaseListBox}"
+                                            ToolTip.Tip="Move up">
+                                        <Path Classes="icon sm"
+                                              Data="{DynamicResource IconChevronDown}"
+                                              RenderTransform="rotate(180deg)"/>
+                                    </Button>
+
+                                    <!-- Move Down -->
+                                    <Button Grid.Column="1"
+                                            Classes="subtle icon-only"
+                                            Margin="0,0,8,0"
+                                            x:CompileBindings="False"
+                                            CommandParameter="{Binding}"
+                                            Command="{Binding DataContext.MoveRebaseEntryDownCommand, ElementName=RebaseListBox}"
+                                            ToolTip.Tip="Move down">
+                                        <Path Classes="icon sm"
+                                              Data="{DynamicResource IconChevronDown}"/>
+                                    </Button>
+
+                                    <!-- Action ComboBox -->
+                                    <ComboBox Grid.Column="2"
+                                              ItemsSource="{Binding AvailableActions}"
+                                              SelectedItem="{Binding SelectedAction, Mode=TwoWay}"
+                                              MinWidth="104"
+                                              Margin="0,0,10,0"/>
+
+                                    <!-- Commit hash + subject -->
+                                    <TextBlock Grid.Column="3"
+                                               Text="{Binding DisplayText}"
+                                               Classes="mono"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Footer buttons -->
+            <StackPanel Grid.Row="3"
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        HorizontalAlignment="Right">
+                <Button Classes="subtle"
+                        Content="Cancel"
+                        Command="{Binding CancelRebaseCommand}"/>
+                <Button Classes="primary"
+                        Content="Start Rebase"
+                        Command="{Binding ExecuteRebaseCommand}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
