@@ -120,6 +120,15 @@ begin
 
     if DirExists(DataDir) then
     begin
+      // Never ask during a silent uninstall. There is nobody to answer, and an
+      // unanswered prompt hangs the process indefinitely — which is exactly how the
+      // v0.1.3 release build stalled: CI installs and uninstalls with /VERYSILENT, and
+      // the data directory had started existing on the runner because the test suite
+      // creates it. Silence means keep the data, matching the dialog's own default and
+      // erring toward not destroying user-authored notes.
+      if UninstallSilent then
+        Exit;
+
       if MsgBox('Also delete GrumpyGit''s saved settings and review notes?' + #13#10 + #13#10 +
                 DataDir + #13#10 + #13#10 +
                 'Choose No to keep them for a future reinstall.',

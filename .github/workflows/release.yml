@@ -20,6 +20,11 @@ jobs:
   build-installer:
     runs-on: windows-latest
 
+    # The whole job takes ~2.5 minutes. A cap well above that turns any hang into a
+    # prompt failure instead of a run that sits burning minutes until somebody notices —
+    # which is what happened when a silent uninstall stopped on an unanswerable prompt.
+    timeout-minutes: 15
+
     steps:
       - uses: actions/checkout@v4
 
@@ -132,9 +137,16 @@ jobs:
           # Now uninstall. /SUPPRESSMSGBOXES answers the "delete your data?"
           # prompt with its default (No), so settings survive — which is the
           # intended behaviour.
+          # Bounded wait. A silent uninstall that stops on a prompt would otherwise block
+          # until the job timeout, and "hung" is a much harder failure to read than
+          # "uninstaller did not exit".
           $uninstaller = $props.UninstallString -replace '"',''
-          Start-Process -FilePath $uninstaller `
-            -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          $proc = Start-Process -FilePath $uninstaller `
+            -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
+          if (-not $proc.WaitForExit(120000)) {
+            $proc.Kill()
+            throw 'Uninstaller did not exit within 120s — it is most likely waiting on a prompt.'
+          }
 
           Start-Sleep -Seconds 3
 
