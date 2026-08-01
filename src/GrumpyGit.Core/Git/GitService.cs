@@ -956,7 +956,13 @@ public class GitService : IGitService
         var result = await GitCmd()
             .WithArguments(args =>
             {
-                args.Add("push").Add(remote);
+                // --follow-tags carries annotated tags reachable from the commits being
+                // pushed. Without it, creating a tag and then pressing Push publishes the
+                // commits and silently leaves the tag behind — which reads as "push did
+                // nothing" and, for a tag-triggered CI release, means no build ever runs.
+                // It only sends annotated tags, and never tags outside what is pushed, so
+                // it cannot publish unrelated local tags.
+                args.Add("push").Add("--follow-tags").Add(remote);
                 if (!string.IsNullOrEmpty(branch))
                     args.Add(branch);
             })
