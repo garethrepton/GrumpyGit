@@ -44,6 +44,19 @@ public partial class CommitRowViewModel : ObservableObject
         ? $"Written by {AiAgentName}\n{AiEvidenceDetail}"
         : string.Empty;
 
+    // ── Push state ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// True when this commit exists only locally — a push would publish it. Left false
+    /// for every row when the repository has no remote, since "unpushed" is meaningless
+    /// there and badging the entire history would be noise.
+    /// </summary>
+    public bool IsUnpushed { get; init; }
+
+    public string PushStateTooltip => IsUnpushed
+        ? "Not pushed — this commit exists only in your local repository"
+        : string.Empty;
+
     public string FormattedDate => IsWorkingTree
         ? string.Empty
         : AuthorDate.ToLocalTime().ToString("yyyy-MM-dd HH:mm");

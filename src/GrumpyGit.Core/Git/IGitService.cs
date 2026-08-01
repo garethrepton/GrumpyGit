@@ -138,6 +138,12 @@ public interface IGitService
     /// <summary>Pushes a tag to a remote.</summary>
     Task PushTagAsync(string repoPath, string tagName, string remote = "origin", CancellationToken ct = default);
 
+    /// <summary>
+    /// Hashes of commits reachable from a local branch but from no remote-tracking
+    /// branch — everything a push would publish.
+    /// </summary>
+    Task<IReadOnlySet<string>> GetUnpushedCommitsAsync(string repoPath, CancellationToken ct = default);
+
     // ── Blame ────────────────────────────────────────────────────────────────
 
     /// <summary>Returns per-line blame information for a file.</summary>

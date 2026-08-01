@@ -1568,6 +1568,48 @@ public class GitService : IGitService
             throw new GitException("git push (tag) failed", result.ExitCode, result.StandardError);
     }
 
+    /// <summary>
+    /// Hashes of commits that exist on a local branch but on no remote-tracking branch.
+    ///
+    /// Uses <c>--branches --not --remotes</c> rather than <c>@{u}..HEAD</c> because the
+    /// graph shows every branch at once: an answer scoped to the checked-out branch
+    /// would mislabel rows belonging to the others. A repository with no remotes has
+    /// nothing to compare against, so every commit comes back unpushed — callers that
+    /// render this should suppress the indicator when there is no remote rather than
+    /// flagging the entire history.
+    /// </summary>
+    public async Task<IReadOnlySet<string>> GetUnpushedCommitsAsync(
+        string repoPath, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("rev-list")
+                .Add("--branches")
+                .Add("--not")
+                .Add("--remotes"))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        var unpushed = new HashSet<string>(StringComparer.Ordinal);
+
+        // Degrade to "everything looks pushed" rather than failing the repo load. This
+        // is a decoration on the graph, not something worth blocking a repo open over.
+        if (result.ExitCode != 0)
+            return unpushed;
+
+        foreach (var line in result.StandardOutput.Split('\n'))
+        {
+            var hash = line.Trim();
+            if (hash.Length > 0)
+                unpushed.Add(hash);
+        }
+
+        return unpushed;
+    }
+
     // -------------------------------------------------------------------------
     // Blame
     // -------------------------------------------------------------------------

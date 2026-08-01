@@ -106,6 +106,27 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnTagTargetCommitChanged(string? value)
         => OnPropertyChanged(nameof(TagTargetLabel));
 
+    // ── Push state ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Commits present locally but on no remote. Recomputed on every repo load, and
+    /// read while building each commit row.
+    /// </summary>
+    private IReadOnlySet<string> _unpushedHashes = new HashSet<string>(StringComparer.Ordinal);
+
+    [ObservableProperty] private int _unpushedCount;
+
+    public bool HasUnpushedCommits => UnpushedCount > 0;
+
+    public string UnpushedLabel =>
+        UnpushedCount == 1 ? "1 unpushed" : $"{UnpushedCount} unpushed";
+
+    partial void OnUnpushedCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasUnpushedCommits));
+        OnPropertyChanged(nameof(UnpushedLabel));
+    }
+
     // ── Settings ────────────────────────────────────────────────────────────────
 
     [ObservableProperty] private bool _isSettingsVisible;
@@ -516,11 +537,20 @@ public partial class MainWindowViewModel : ViewModelBase
             var branchListTask = _git.GetBranchesAsync(RepoPath);
             var remoteTask = _git.GetRemoteUrlAsync(RepoPath);
             var stashTask = _git.GetStashListAsync(RepoPath);
+            var unpushedTask = _git.GetUnpushedCommitsAsync(RepoPath);
 
-            await Task.WhenAll(branchTask, commitsTask, statusTask, branchListTask, remoteTask, stashTask);
+            await Task.WhenAll(branchTask, commitsTask, statusTask, branchListTask, remoteTask, stashTask, unpushedTask);
 
             CurrentBranch = branchTask.Result;
             RemoteUrl = remoteTask.Result;
+
+            // With no remote there is nothing to be ahead of, and rev-list would report
+            // the entire history as unpushed. Treat that as "nothing to show" so a
+            // local-only repository does not render a badge on every row.
+            _unpushedHashes = string.IsNullOrEmpty(RemoteUrl)
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : unpushedTask.Result;
+            UnpushedCount = _unpushedHashes.Count;
 
             _suppressBranchSwitch = true;
             Branches.Clear();
@@ -1010,6 +1040,7 @@ public partial class MainWindowViewModel : ViewModelBase
             IsMergeCommit = node.ParentHashes.Length > 1,
             AiAgentName = ai?.AgentName ?? string.Empty,
             AiEvidenceDetail = ai?.Detail ?? string.Empty,
+            IsUnpushed = _unpushedHashes.Contains(node.Hash),
         };
     }
 

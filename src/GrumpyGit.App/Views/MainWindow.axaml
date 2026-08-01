@@ -616,8 +616,8 @@
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CommitRowViewModel"
                                                   x:CompileBindings="False">
-                                        <!-- rule | graph | sha | refs | subject | ai | author | date -->
-                                        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto"
+                                        <!-- rule | graph | sha | refs | subject | ai | unpushed | author | date -->
+                                        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto"
                                               MinHeight="20">
                                             <Grid.ContextMenu>
                                                 <ContextMenu>
@@ -707,7 +707,24 @@
                                                 </StackPanel>
                                             </Border>
 
-                                            <TextBlock Grid.Column="6"
+                                            <!-- Unpushed marker. Same rule as the AI badge: glyph + text +
+                                                 border all carry the signal, so it does not rely on colour. -->
+                                            <Border Grid.Column="6"
+                                                    Classes="badge warn"
+                                                    Margin="8,0,0,0"
+                                                    IsVisible="{Binding IsUnpushed}"
+                                                    ToolTip.Tip="{Binding PushStateTooltip}">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <Path Classes="icon warn"
+                                                          Width="9" Height="9"
+                                                          StrokeThickness="2.2"
+                                                          Data="{DynamicResource IconPush}"/>
+                                                    <TextBlock Text="unpushed"
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <TextBlock Grid.Column="7"
                                                        Text="{Binding AuthorName}"
                                                        Classes="secondary"
                                                        FontSize="{DynamicResource FontSizeLabel}"
@@ -716,7 +733,7 @@
                                                        TextTrimming="CharacterEllipsis"
                                                        VerticalAlignment="Center"/>
 
-                                            <TextBlock Grid.Column="7"
+                                            <TextBlock Grid.Column="8"
                                                        Text="{Binding FormattedDate}"
                                                        Classes="tertiary"
                                                        FontSize="{DynamicResource FontSizeLabel}"
@@ -1904,6 +1921,23 @@
                         </MultiBinding>
                     </TextBlock.Text>
                 </TextBlock>
+
+                <!-- Only shown when there is something to push, so a fully-pushed repo
+                     stays quiet rather than reading "0 unpushed". -->
+                <Border DockPanel.Dock="Left"
+                        Classes="badge warn"
+                        Margin="12,0,0,0"
+                        IsVisible="{Binding HasUnpushedCommits}"
+                        ToolTip.Tip="Commits on a local branch that exist on no remote">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Path Classes="icon warn"
+                              Width="9" Height="9"
+                              StrokeThickness="2.2"
+                              Data="{DynamicResource IconPush}"/>
+                        <TextBlock Text="{Binding UnpushedLabel}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
 
                 <!-- Was #6060A0 on #1A1A2C ≈ 3.0:1 at 11px — below the AA floor -->
                 <TextBlock DockPanel.Dock="Right"

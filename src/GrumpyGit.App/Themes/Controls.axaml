@@ -469,6 +469,15 @@
     <Style Selector="Border.badge.warn > TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource WarnFgBrush}"/>
     </Style>
+    <!-- Descendant (not child) selector, same reason as the AI badge above: the
+         unpushed badge wraps its glyph and label in a StackPanel, so the label is a
+         grandchild and neither the rule above nor `Border.badge > TextBlock` reaches
+         it. Declared after both so it wins for nested labels. -->
+    <Style Selector="Border.badge.warn TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource WarnFgBrush}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMicro}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
 
     <Style Selector="Border.badge.danger">
         <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
