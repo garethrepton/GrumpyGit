@@ -15,6 +15,58 @@ A .NET desktop application providing a visual git client with GitHub integration
 
 ---
 
+## The Commandments
+
+These govern all work in this repo. They are not preferences — a change that breaks one is a
+decision to raise, not to make quietly.
+
+1. **Thou shalt not call out unless it has explicitly been agreed.** The agreed outbound surface is
+   exactly two things: `git.exe` push/pull (credentials handled by Git Credential Manager) and the
+   GitHub API via Octokit. Nothing else — no telemetry, no update check, no analytics, no third
+   party endpoint — gets added on your own initiative, however convenient. Ask, get a yes, then
+   write it. Silence is a no. Run `network-audit` after any change that could have added one.
+2. **Thou shalt keep outbound calls neatly abstracted.** Everything that touches the outside world —
+   `git.exe`, the GitHub API, the filesystem — lives behind its own type in its own file under
+   `GrumpyGit.Core/Git/` (or its Octokit equivalent), so the boundary is one grep away and
+   viewmodels stay testable without a real repository. No raw `CliWrap` or `Process.Start` calls,
+   and no Octokit client, scattered through UI or viewmodel code.
+3. **Thou shalt use the minimal amount of tools and code to achieve the goal.** Prefer no new
+   dependency, then a smaller one; prefer extending an existing type to adding one. The stack in
+   this file is deliberately short — every addition to it is a decision, so run `package-audit` and
+   justify it. Delete rather than deprecate.
+4. **Thou shalt keep to SOLID where it earns its keep, and go functional where that is clearer.**
+   Interfaces exist to be seams for testing — a fake git backend, a fake GitHub client — not for
+   symmetry. A pure static function over immutable records beats a class hierarchy when there is no
+   state to hold; graph lane assignment and diff parsing are pure transforms and should read as such.
+5. **Thou shalt allow no security concerns.** This must be safe to run in a production environment
+   without a second thought: no credential or token written to disk or logged (Git Credential
+   Manager owns that), no repo path, branch name, commit message or remote URL interpolated into a
+   shell — pass arguments as arguments, never build a command line, and never trust a value that
+   came from a repository. Treat `security-reviewer` and `dangerous-code` output as a blocking
+   review, not advice.
+6. **Thou shalt not comment everywhere without a good reason.** A comment earns its place by saying
+   *why* — the surprising constraint, the bug that motivated the code, the obvious approach that was
+   tried and failed (git's porcelain formats are full of these). Never restate what the code already
+   says; a line that narrates the obvious is noise that rots the moment the code moves. If a comment
+   is needed to explain *what* is happening, rename or restructure instead.
+7. **Thou shalt not add packages we do not need.** The stack table below is the whole list, and it
+   is short on purpose. A package is not free: it is transitive dependencies, a licence, a supply
+   chain, an upgrade treadmill, and — for a desktop app — startup time and installer size. Reach for
+   one only when the alternative is genuinely reimplementing something hard, run `package-audit`
+   before adding it, and say why in the PR. A helper you would use twice is a function, not a
+   reference.
+8. **Thou shalt be succinct — in explanations, comments and code.** Answer, then stop. No preamble,
+   no recap of what was just read, no summary of a summary. The same applies to the artefacts: a
+   viewmodel that needs a paragraph to explain itself needs splitting instead, and a commit message
+   says what changed and why in a line. Short is a courtesy to the next reader, human or model.
+9. **Thou shalt not store, commit or leak secrets or PII.** No token, credential, connection string,
+   machine name or user path in source, tests, fixtures, logs or settings — Git Credential Manager
+   holds the credentials and nothing here caches them. A git repository is full of real people's
+   names and email addresses: they belong on screen, not in logs, telemetry or crash reports, and
+   never in test fixtures. Invent test repositories; never paste a real one's history.
+
+---
+
 ## Technology Stack
 
 | Concern | Choice | Package |

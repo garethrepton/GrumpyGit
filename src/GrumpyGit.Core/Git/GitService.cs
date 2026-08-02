@@ -1068,6 +1068,10 @@ public class GitService : IGitService
         ValidateRepoPath(repoPath);
         ValidateBranch(branchName);
 
+        // `switch -c` checks the new branch out, which would move a worktree off the
+        // branch it exists to hold. See the worktree section for why this is refused.
+        await EnsureNotLinkedWorktreeAsync(repoPath, branchName, ct);
+
         var result = await GitCmd()
             .WithArguments(args => args
                 .Add("switch")
@@ -1086,6 +1090,8 @@ public class GitService : IGitService
     {
         ValidateRepoPath(repoPath);
         ValidateBranch(branchName);
+
+        await EnsureNotLinkedWorktreeAsync(repoPath, branchName, ct);
 
         var result = await GitCmd()
             .WithArguments(args => args
@@ -2152,6 +2158,264 @@ public class GitService : IGitService
         var rebaseApply = Path.Combine(repoPath, ".git", "rebase-apply");
 
         return Task.FromResult(Directory.Exists(rebaseMerge) || Directory.Exists(rebaseApply));
+    }
+
+    // -------------------------------------------------------------------------
+    // Worktrees
+    //
+    // A worktree here is always bound to one branch. Git enforces half of that on
+    // its own — it refuses to check the same branch out twice — but it has no
+    // mechanism to stop `git switch` inside a worktree afterwards. That second half
+    // is enforced in this class: CheckoutBranchAsync and CreateBranchAsync both
+    // refuse when the target path is a linked worktree, so no caller in the app can
+    // move a worktree off the branch it was created for. The UI reflects the same
+    // rule, but the guard lives here so it cannot be bypassed by a new call site.
+    // -------------------------------------------------------------------------
+
+    private static void ValidateWorktreePath(string worktreePath)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath))
+            throw new ArgumentException("Worktree path must not be empty.", nameof(worktreePath));
+        if (worktreePath.StartsWith('-'))
+            throw new ArgumentException($"Worktree path must not start with '-': '{worktreePath}'", nameof(worktreePath));
+        if (!Path.IsPathRooted(worktreePath))
+            throw new ArgumentException($"Worktree path must be an absolute path: '{worktreePath}'", nameof(worktreePath));
+    }
+
+    /// <summary>A start point may be a branch name or a commit hash; nothing else.</summary>
+    private static void ValidateStartPoint(string startPoint)
+    {
+        if (string.IsNullOrWhiteSpace(startPoint))
+            throw new ArgumentException("Start point must not be empty.", nameof(startPoint));
+        if (startPoint.StartsWith('-'))
+            throw new ArgumentException($"Start point must not start with '-': '{startPoint}'", nameof(startPoint));
+        if (!BranchNamePattern.IsMatch(startPoint) && !HexHashPattern.IsMatch(startPoint))
+            throw new ArgumentException($"Invalid start point: '{startPoint}'", nameof(startPoint));
+    }
+
+    public async Task<IReadOnlyList<GitWorktree>> GetWorktreesAsync(
+        string repoPath, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("worktree")
+                .Add("list")
+                .Add("--porcelain"))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git worktree list failed", result.ExitCode, result.StandardError);
+
+        return WorktreeListParser.Parse(result.StandardOutput);
+    }
+
+    /// <summary>
+    /// True when <paramref name="repoPath"/> is a linked worktree rather than the
+    /// repository's main working directory.
+    ///
+    /// Compares the worktree-specific git dir against the shared one: they are the same
+    /// directory in the main worktree and differ (…/worktrees/&lt;name&gt;) in a linked one.
+    /// <c>--path-format=absolute</c> keeps the two comparable — without it git answers
+    /// one relatively and one absolutely.
+    /// </summary>
+    public async Task<bool> IsLinkedWorktreeAsync(
+        string repoPath, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("rev-parse")
+                .Add("--path-format=absolute")
+                .Add("--git-dir")
+                .Add("--git-common-dir"))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        // Not a repository, or a git too old for --path-format: treat as "not linked"
+        // rather than failing. The caller uses this to decide whether to lock branch
+        // switching, and refusing to answer would lock a perfectly normal repo.
+        if (result.ExitCode != 0)
+            return false;
+
+        var lines = result.StandardOutput
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0)
+            .ToList();
+
+        if (lines.Count < 2)
+            return false;
+
+        return !PathsEqual(lines[0], lines[1]);
+    }
+
+    private static bool PathsEqual(string a, string b)
+    {
+        static string Normalise(string p) =>
+            Path.TrimEndingDirectorySeparator(
+                Path.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar)));
+
+        try
+        {
+            return string.Equals(Normalise(a), Normalise(b), StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// Creates a worktree at <paramref name="worktreePath"/> holding
+    /// <paramref name="branchName"/>. With <paramref name="createBranch"/> the branch is
+    /// created from <paramref name="startPoint"/> (HEAD when null); otherwise the branch
+    /// must already exist and must not be checked out anywhere else.
+    /// </summary>
+    public async Task AddWorktreeAsync(
+        string repoPath,
+        string worktreePath,
+        string branchName,
+        bool createBranch = false,
+        string? startPoint = null,
+        CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateWorktreePath(worktreePath);
+        ValidateBranch(branchName);
+        if (startPoint is not null)
+            ValidateStartPoint(startPoint);
+
+        // git creates the leaf directory itself but not missing parents, and its error
+        // for a missing parent is far less clear than this one.
+        var parent = Path.GetDirectoryName(Path.GetFullPath(worktreePath));
+        if (parent is not null && !Directory.Exists(parent))
+            Directory.CreateDirectory(parent);
+
+        if (Directory.Exists(worktreePath) &&
+            Directory.EnumerateFileSystemEntries(worktreePath).Any())
+        {
+            throw new ArgumentException(
+                $"Worktree path already exists and is not empty: '{worktreePath}'", nameof(worktreePath));
+        }
+
+        var result = await GitCmd()
+            .WithArguments(args =>
+            {
+                args.Add("worktree").Add("add");
+
+                if (createBranch)
+                {
+                    // -b makes the branch and checks it out into the new worktree in one step.
+                    args.Add("-b").Add(branchName).Add(worktreePath);
+                    if (startPoint is not null)
+                        args.Add(startPoint);
+                }
+                else
+                {
+                    args.Add(worktreePath).Add(branchName);
+                }
+            })
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git worktree add failed", result.ExitCode, result.StandardError);
+    }
+
+    /// <summary>
+    /// Removes the worktree at the given path. Refuses to remove the main worktree —
+    /// that would be a request to delete the repository's own working directory.
+    /// </summary>
+    public async Task RemoveWorktreeAsync(
+        string repoPath, string worktreePath, bool force = false, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateWorktreePath(worktreePath);
+
+        var worktrees = await GetWorktreesAsync(repoPath, ct);
+        var target = worktrees.FirstOrDefault(w => PathsEqual(w.Path, worktreePath))
+            ?? throw new ArgumentException(
+                $"No worktree registered at '{worktreePath}'.", nameof(worktreePath));
+
+        if (target.IsMain)
+            throw new InvalidOperationException(
+                "The main working directory cannot be removed as a worktree.");
+
+        var result = await GitCmd()
+            .WithArguments(args =>
+            {
+                args.Add("worktree").Add("remove");
+                if (force) args.Add("--force");
+                args.Add(worktreePath);
+            })
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git worktree remove failed", result.ExitCode, result.StandardError);
+    }
+
+    /// <summary>
+    /// Removes the worktree holding <paramref name="branchName"/>. Worktrees are created
+    /// per branch, so the branch is the identifier a user actually reasons about; this
+    /// spares callers from tracking paths.
+    /// </summary>
+    public async Task RemoveWorktreeForBranchAsync(
+        string repoPath, string branchName, bool force = false, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateBranch(branchName);
+
+        var worktrees = await GetWorktreesAsync(repoPath, ct);
+        var target = worktrees.FirstOrDefault(w =>
+                         w.IsLinked &&
+                         string.Equals(w.Branch, branchName, StringComparison.Ordinal))
+            ?? throw new ArgumentException(
+                $"No worktree is checked out to branch '{branchName}'.", nameof(branchName));
+
+        await RemoveWorktreeAsync(repoPath, target.Path, force, ct);
+    }
+
+    /// <summary>
+    /// Drops administrative entries for worktrees whose directories have gone missing.
+    /// </summary>
+    public async Task PruneWorktreesAsync(string repoPath, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("worktree")
+                .Add("prune"))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git worktree prune failed", result.ExitCode, result.StandardError);
+    }
+
+    /// <summary>
+    /// Throws when <paramref name="repoPath"/> is a linked worktree. Guards every code
+    /// path that would move a worktree off the branch it was created for.
+    /// </summary>
+    private async Task EnsureNotLinkedWorktreeAsync(
+        string repoPath, string attemptedBranch, CancellationToken ct)
+    {
+        if (!await IsLinkedWorktreeAsync(repoPath, ct))
+            return;
+
+        throw new InvalidOperationException(
+            $"This worktree is bound to its branch and cannot switch to '{attemptedBranch}'. " +
+            "Create a worktree for that branch instead, or use the repository's main working directory.");
     }
 
     // -------------------------------------------------------------------------

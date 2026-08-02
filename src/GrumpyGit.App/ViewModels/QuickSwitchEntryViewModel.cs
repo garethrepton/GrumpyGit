@@ -11,10 +11,16 @@ public partial class QuickSwitchEntryViewModel : ObservableObject
 {
     public required string Path { get; init; }
 
-    /// <summary>True when this repo is already an open tab, so it can be labelled as such.</summary>
+    /// <summary>True when this path is already in the repository tree.</summary>
     public bool IsOpen { get; init; }
 
     public bool IsActive { get; init; }
+
+    /// <summary>A linked worktree rather than a repository root.</summary>
+    public bool IsWorktree { get; init; }
+
+    /// <summary>Branch at this path, when known — a worktree is identified by it.</summary>
+    public string Branch { get; init; } = string.Empty;
 
     public string DisplayName
     {
@@ -50,7 +56,10 @@ public partial class QuickSwitchEntryViewModel : ObservableObject
         }
     }
 
-    public string StatusLabel => IsActive ? "current" : IsOpen ? "open" : string.Empty;
+    public string StatusLabel => IsActive ? "current"
+        : IsWorktree ? "worktree"
+        : IsOpen ? "open"
+        : string.Empty;
 
     public bool HasStatusLabel => !string.IsNullOrEmpty(StatusLabel);
 }

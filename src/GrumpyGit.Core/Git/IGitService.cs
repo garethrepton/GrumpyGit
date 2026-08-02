@@ -204,6 +204,44 @@ public interface IGitService
     /// </summary>
     Task<bool> IsRebaseInProgressAsync(string repoPath, CancellationToken ct = default);
 
+    // ── Worktrees ────────────────────────────────────────────────────────────
+    //
+    // Worktrees are bound to a branch: created for one, listed by one, removed by one.
+    // <see cref="CheckoutBranchAsync"/> and <see cref="CreateBranchAsync"/> refuse to
+    // run inside a linked worktree so that binding cannot be broken after the fact.
+
+    /// <summary>All worktrees for the repository. The main working directory is first.</summary>
+    Task<IReadOnlyList<GitWorktree>> GetWorktreesAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>
+    /// True when <paramref name="repoPath"/> is a linked worktree rather than the
+    /// repository's main working directory.
+    /// </summary>
+    Task<bool> IsLinkedWorktreeAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates a worktree holding <paramref name="branchName"/>. With
+    /// <paramref name="createBranch"/> the branch is created from
+    /// <paramref name="startPoint"/> (HEAD when null); otherwise it must already exist
+    /// and not be checked out in another worktree.
+    /// </summary>
+    Task AddWorktreeAsync(
+        string repoPath,
+        string worktreePath,
+        string branchName,
+        bool createBranch = false,
+        string? startPoint = null,
+        CancellationToken ct = default);
+
+    /// <summary>Removes the worktree at a path. Refuses to remove the main worktree.</summary>
+    Task RemoveWorktreeAsync(string repoPath, string worktreePath, bool force = false, CancellationToken ct = default);
+
+    /// <summary>Removes whichever worktree holds <paramref name="branchName"/>.</summary>
+    Task RemoveWorktreeForBranchAsync(string repoPath, string branchName, bool force = false, CancellationToken ct = default);
+
+    /// <summary>Drops administrative entries for worktrees whose directories are gone.</summary>
+    Task PruneWorktreesAsync(string repoPath, CancellationToken ct = default);
+
     // NOTE: RunCommandAsync was deliberately removed from this interface — it was an
     // unvalidated git argument passthrough. See the note at the end of GitService.cs.
 }

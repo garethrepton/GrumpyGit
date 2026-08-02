@@ -138,27 +138,30 @@ public partial class MainWindow : Window
             // feature's entry points — a shortcut that still opens a panel nothing
             // advertises is worse than no shortcut, because it fires by accident.
 
-            // Ctrl+Tab / Ctrl+Shift+Tab — cycle open repositories
+            // Ctrl+Tab / Ctrl+Shift+Tab — walk the repository tree. This steps through
+            // worktrees as well as repository roots, because a worktree is somewhere you
+            // work, not a detail of the repo that owns it.
             if (e.Key == Key.Tab && e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
-                vm.CycleTabCommand.Execute(
+                vm.CycleRepoCommand.Execute(
                     e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? "prev" : "next");
                 e.Handled = true;
                 return;
             }
 
-            // Ctrl+W — close the active repository tab
+            // Ctrl+W — close the repository owning the active node
             if (e.Key == Key.W && e.KeyModifiers == KeyModifiers.Control)
             {
-                vm.CloseActiveTabCommand.Execute(null);
+                vm.CloseActiveRepoCommand.Execute(null);
                 e.Handled = true;
                 return;
             }
 
-            // Ctrl+1..9 — jump straight to the nth open repository
+            // Ctrl+1..9 — jump straight to the nth repository root (roots only, so the
+            // number of a given repository does not shift as worktrees come and go)
             if (e.KeyModifiers == KeyModifiers.Control && e.Key >= Key.D1 && e.Key <= Key.D9)
             {
-                vm.SwitchToTabIndexCommand.Execute((e.Key - Key.D1 + 1).ToString());
+                vm.SwitchToRepoIndexCommand.Execute((e.Key - Key.D1 + 1).ToString());
                 e.Handled = true;
                 return;
             }

@@ -194,8 +194,16 @@ public class DiffMinimap : Control
         if (ViewportLineCount <= 0 || ViewportLineCount >= total)
             return;
 
-        var top = Math.Clamp((ViewportFirstLine - 1) * scale, 0, height);
-        var boxHeight = Math.Clamp(ViewportLineCount * scale, MinMarkerHeight, height - top);
+        // Reserve room for the box before clamping `top`, so the clamp below can never be
+        // handed a min above its max — Math.Clamp throws on that rather than saturating.
+        // The editor reports a first visible line past the normal last-page start when the
+        // horizontal scrollbar appears (scrolling right to the end of a long line adds
+        // scrollable height), which drove `top` to within a pixel of the bottom. Throwing
+        // inside the render pass took the whole process down, not just the frame.
+        var maxTop = Math.Max(0, height - MinMarkerHeight);
+        var top = Math.Clamp((ViewportFirstLine - 1) * scale, 0, maxTop);
+        var available = Math.Max(MinMarkerHeight, height - top);
+        var boxHeight = Math.Clamp(ViewportLineCount * scale, MinMarkerHeight, available);
 
         context.FillRectangle(
             ThemeTokens.Brush("BgHoverBrush", Brushes.Gray) is ISolidColorBrush s

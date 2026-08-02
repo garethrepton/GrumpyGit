@@ -165,11 +165,10 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _newPrIsDraft;
     private bool _prsFetched;
 
-    // ── Repository tabs ────────────────────────────────────────────────────────
+    // ── Repository tree ────────────────────────────────────────────────────────
+    // RepoNodes, ActiveNode and the worktree commands live in
+    // MainWindowViewModel.Repos.cs.
 
-    public ObservableCollection<RepoTabViewModel> RepoTabs { get; } = new();
-    [ObservableProperty] private RepoTabViewModel? _activeTab;
-    [ObservableProperty] private bool _hasMultipleTabs;
     public ObservableCollection<string> RecentRepositories { get; } = new();
 
     // ── Collections ───────────────────────────────────────────────────────────
@@ -509,16 +508,15 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
 
         var path = results[0].TryGetLocalPath() ?? results[0].Path.LocalPath;
-        await LoadRepoAsync(path);
+
+        // Routed through OpenRepositoryAsync so the repository lands in the tree and, if
+        // the chosen folder is a linked worktree, resolves under the repo that owns it.
+        await OpenRepositoryAsync(path);
     }
 
     private async Task LoadRepoAsync(string path)
     {
         RepoPath = path;
-
-        // Auto-create tab if this repo isn't already tabbed
-        if (!RepoTabs.Any(t => string.Equals(t.Path, path, StringComparison.OrdinalIgnoreCase)))
-            AddRepoTab(path);
 
         Commits.Clear();
         ChangedFiles.Clear();
@@ -543,6 +541,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
             CurrentBranch = branchTask.Result;
             RemoteUrl = remoteTask.Result;
+
+            // A linked worktree is pinned to the branch it was created for. GitService
+            // refuses the switch outright; this flag lets the UI say so up front rather
+            // than presenting a branch picker that throws when used.
+            IsActiveRepoWorktree = await _git.IsLinkedWorktreeAsync(RepoPath);
+            ActiveWorktreeBranch = IsActiveRepoWorktree ? CurrentBranch : string.Empty;
 
             // With no remote there is nothing to be ahead of, and rev-list would report
             // the entire history as unpushed. Treat that as "nothing to show" so a
@@ -589,6 +593,10 @@ public partial class MainWindowViewModel : ViewModelBase
             var workingFiles = statusTask.Result;
             PendingChangesCount = workingFiles.Count;
 
+            // Mirror the count onto the tree row so the badge reflects this checkout.
+            if (ActiveNode is not null)
+                ActiveNode.PendingChanges = workingFiles.Count;
+
             Commits.Add(new CommitRowViewModel
             {
                 Hash = CommitRowViewModel.WorkingTreeHash,
@@ -603,6 +611,12 @@ public partial class MainWindowViewModel : ViewModelBase
             _totalLanes = totalLanes;
             _loadedCommitCount = 0;
             LoadNextCommitPage();
+
+            // Land on the working-tree row. Switching to a repository is nearly always a
+            // question about what is uncommitted there, and selecting nothing left the
+            // file list and diff pane blank until the user clicked the top row anyway.
+            // Assigning it fires OnSelectedCommitChanged, which loads the file list.
+            SelectedCommit = Commits.FirstOrDefault(c => c.IsWorkingTree);
 
             // The AI-session count used to be appended here. It advertised a panel that
             // can no longer be opened, so it read as a broken promise.

@@ -127,6 +127,21 @@
         <Style Selector="TextBox.commit-msg, TextBox.branch-input">
             <Setter Property="Padding" Value="8,5"/>
         </Style>
+
+        <!-- The loaded checkout in the repository tree. Applied via Classes.active
+             so the row needs no bool-to-weight converter. -->
+        <Style Selector="TextBlock.active">
+            <Setter Property="FontWeight" Value="700"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
+        </Style>
+
+        <!-- Rows in the repository tree sit tighter than the file tree's, since the
+             tree is a navigation list rather than a browsing surface. -->
+        <Style Selector="TreeView.repo-tree TreeViewItem"
+               x:DataType="vm:RepoTreeNodeViewModel">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            <Setter Property="Padding" Value="0,1"/>
+        </Style>
     </Window.Styles>
 
     <!-- ═══════════════════════════════════════════════════════════════════════
@@ -138,53 +153,40 @@
          ══════════════════════════════════════════════════════════════════════ -->
     <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
 
-        <!-- ── Row 0: Repository tab bar ─────────────────────────────────── -->
+        <!-- ── Row 0: Active repository context ─────────────────────────────
+             Switching lives in the sidebar tree; this row carries the two things
+             a narrow tree row has no space for. -->
         <Border Grid.Row="0"
                 Classes="chrome"
                 BorderThickness="0,0,0,1"
-                Padding="6,3,6,0"
-                IsVisible="{Binding HasMultipleTabs}">
+                Padding="10,5"
+                IsVisible="{Binding HasRepoNodes}">
             <DockPanel LastChildFill="True">
-                <Button DockPanel.Dock="Right"
-                        Classes="subtle icon-only"
-                        Command="{Binding OpenRepoInNewTabCommand}"
-                        ToolTip.Tip="Open repo in new tab"
+
+                <!-- A linked worktree cannot change branch: GitService refuses the
+                     switch, so say why before the user reaches for the picker. -->
+                <Border DockPanel.Dock="Right"
+                        Classes="badge warn"
                         VerticalAlignment="Center"
-                        Margin="4,0,0,3">
-                    <Path Classes="icon sm" Data="{DynamicResource IconPlus}"/>
-                </Button>
-                <ItemsControl ItemsSource="{Binding RepoTabs}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="3"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:RepoTabViewModel"
-                                      x:CompileBindings="False">
-                            <Border CornerRadius="7,7,0,0"
-                                    Padding="12,6"
-                                    Cursor="Hand"
-                                    Background="{DynamicResource BgSurfaceBrush}">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{Binding DisplayName}"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                               FontSize="{DynamicResource FontSizeSmall}"
-                                               VerticalAlignment="Center"
-                                               Cursor="Hand"/>
-                                    <Button Classes="subtle icon-only"
-                                            Padding="2"
-                                            VerticalAlignment="Center"
-                                            ToolTip.Tip="Close tab"
-                                            CommandParameter="{Binding}"
-                                            Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
-                                        <Path Classes="icon sm" Data="{DynamicResource IconClose}"/>
-                                    </Button>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                        Margin="10,0,0,0"
+                        IsVisible="{Binding IsActiveRepoWorktree}"
+                        ToolTip.Tip="Worktrees are created for one branch and stay on it. Create another worktree to work on a different branch.">
+                    <TextBlock>
+                        <Run Text="WORKTREE — LOCKED TO"/>
+                        <Run Text="{Binding ActiveWorktreeBranch}" FontWeight="700"/>
+                    </TextBlock>
+                </Border>
+
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center">
+                    <Path Classes="icon sm" Data="{DynamicResource IconFolderOpen}"/>
+                    <TextBlock Text="{Binding RepoPath}"
+                               Classes="caption"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding RepoPath}"/>
+                </StackPanel>
             </DockPanel>
         </Border>
 
@@ -249,15 +251,19 @@
                         </StackPanel>
                     </Button>
 
-                    <!-- Branch -->
+                    <!-- Branch. Both controls switch the checkout, which a linked
+                         worktree is not allowed to do — GitService throws on the
+                         attempt, so they are disabled rather than left to fail. -->
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <ComboBox Classes="branch-combo"
                                   ItemsSource="{Binding Branches}"
                                   SelectedItem="{Binding SelectedBranch, Mode=TwoWay}"
+                                  IsEnabled="{Binding !IsActiveRepoWorktree}"
                                   ToolTip.Tip="Switch branch"
                                   VerticalAlignment="Center"/>
                         <Button Classes="sm"
                                 Command="{Binding StartCreateBranchCommand}"
+                                IsEnabled="{Binding !IsActiveRepoWorktree}"
                                 ToolTip.Tip="Create a new branch">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Path Classes="icon sm" Data="{DynamicResource IconBranch}"/>
@@ -423,35 +429,206 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Column 0: Branches sidebar ───────────────────────────────── -->
+            <!-- Column 0: Repository tree sidebar ─────────────────────────── -->
             <Border Grid.Column="0" Classes="panel"
                     IsVisible="{Binding IsChromeVisible}">
                 <Grid RowDefinitions="Auto,*,Auto">
-                    <TextBlock Grid.Row="0"
-                               Classes="panel-header"
-                               Text="BRANCHES"/>
+
+                    <!-- ── REPOSITORIES ──────────────────────────────────── -->
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+                        <TextBlock Grid.Column="0"
+                                   Classes="panel-header"
+                                   Text="REPOSITORIES"/>
+                        <Button Grid.Column="1"
+                                Classes="subtle icon-only"
+                                Padding="3"
+                                Margin="0,0,2,0"
+                                VerticalAlignment="Center"
+                                Command="{Binding StartCreateWorktreeCommand}"
+                                IsEnabled="{Binding HasRepoNodes}"
+                                ToolTip.Tip="New worktree for a branch">
+                            <Path Classes="icon sm" Data="{DynamicResource IconBranch}"/>
+                        </Button>
+                        <Button Grid.Column="2"
+                                Classes="subtle icon-only"
+                                Padding="3"
+                                Margin="0,0,6,0"
+                                VerticalAlignment="Center"
+                                Command="{Binding AddRepositoryCommand}"
+                                ToolTip.Tip="Add a repository">
+                            <Path Classes="icon sm" Data="{DynamicResource IconPlus}"/>
+                        </Button>
+                    </Grid>
+
                     <Panel Grid.Row="1">
-                        <!-- Empty state: no repository open yet -->
                         <StackPanel Classes="empty-state"
-                                    Margin="12"
-                                    IsVisible="{Binding !Branches.Count}">
-                            <Path Classes="icon" Data="{DynamicResource IconBranch}"/>
-                            <TextBlock Classes="empty-body" Text="No branches yet"/>
+                                    Margin="12,6"
+                                    IsVisible="{Binding !HasRepoNodes}">
+                            <TextBlock Classes="empty-body"
+                                       Text="No repositories open. Ctrl+P to search, or + to add one."
+                                       TextWrapping="Wrap"/>
                         </StackPanel>
-                        <ListBox Background="Transparent"
-                                 BorderThickness="0"
-                                 ItemsSource="{Binding Branches}"
-                                 SelectedItem="{Binding SelectedBranch, Mode=TwoWay}">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="x:String">
-                                    <TextBlock Text="{Binding}"
-                                               TextTrimming="CharacterEllipsis"/>
+
+                        <TreeView Classes="repo-tree"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  IsVisible="{Binding HasRepoNodes}"
+                                  ItemsSource="{Binding RepoNodes}"
+                                  SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}"
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <TreeView.DataTemplates>
+
+                                <!-- Repository root -->
+                                <TreeDataTemplate DataType="vm:RepoNodeViewModel"
+                                                  ItemsSource="{Binding Children}">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                                          ColumnSpacing="7"
+                                          x:CompileBindings="False"
+                                          ToolTip.Tip="{Binding Path}">
+                                        <Grid.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="New worktree…"
+                                                          CommandParameter="{Binding}"
+                                                          Command="{Binding DataContext.StartCreateWorktreeCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+                                                <MenuItem Header="Refresh worktrees"
+                                                          CommandParameter="{Binding}"
+                                                          Command="{Binding DataContext.RefreshRepoWorktreesCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+                                                <MenuItem Header="Prune stale worktrees"
+                                                          Command="{Binding DataContext.PruneWorktreesCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+                                                <Separator/>
+                                                <MenuItem Header="Close repository"
+                                                          CommandParameter="{Binding}"
+                                                          Command="{Binding DataContext.CloseRepoNodeCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+                                            </ContextMenu>
+                                        </Grid.ContextMenu>
+
+                                        <Path Grid.Column="0"
+                                              Classes="icon sm"
+                                              Data="{DynamicResource IconFolderOpen}"
+                                              VerticalAlignment="Center"/>
+
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding DisplayName}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Classes.active="{Binding IsActive}"/>
+
+                                        <TextBlock Grid.Column="2"
+                                                   Classes="caption"
+                                                   Text="{Binding Branch}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   MaxWidth="90"/>
+
+                                        <!-- Uncommitted-change dot -->
+                                        <Border Grid.Column="3"
+                                                Classes="badge warn"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding HasPendingChanges}">
+                                            <TextBlock Text="{Binding PendingChanges}"/>
+                                        </Border>
+                                    </Grid>
+                                </TreeDataTemplate>
+
+                                <!-- Linked worktree. Named by its branch, because that
+                                     is what identifies it — the folder can be renamed,
+                                     the branch binding cannot be changed. -->
+                                <DataTemplate DataType="vm:WorktreeNodeViewModel">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                                          ColumnSpacing="7"
+                                          x:CompileBindings="False"
+                                          ToolTip.Tip="{Binding Path}">
+                                        <Grid.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Remove worktree"
+                                                          CommandParameter="{Binding}"
+                                                          Command="{Binding DataContext.RemoveWorktreeCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+                                                <MenuItem Header="Force remove (discards its changes)"
+                                                          CommandParameter="{Binding}"
+                                                          Command="{Binding DataContext.ForceRemoveWorktreeCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+                                            </ContextMenu>
+                                        </Grid.ContextMenu>
+
+                                        <Path Grid.Column="0"
+                                              Classes="icon sm"
+                                              Data="{DynamicResource IconBranch}"
+                                              VerticalAlignment="Center"/>
+
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding DisplayName}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Classes.active="{Binding IsActive}"/>
+
+                                        <Border Grid.Column="2"
+                                                Classes="badge danger"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding IsMissing}"
+                                                ToolTip.Tip="This worktree's directory is missing. Prune to clear it.">
+                                            <TextBlock Text="MISSING"/>
+                                        </Border>
+
+                                        <Border Grid.Column="3"
+                                                Classes="badge warn"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding HasPendingChanges}">
+                                            <TextBlock Text="{Binding PendingChanges}"/>
+                                        </Border>
+                                    </Grid>
                                 </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+
+                                <!-- "Branches" / "Worktrees" heading -->
+                                <TreeDataTemplate DataType="vm:RepoGroupNodeViewModel"
+                                                  ItemsSource="{Binding Children}">
+                                    <Grid ColumnDefinitions="*,Auto"
+                                          ColumnSpacing="7"
+                                          x:CompileBindings="False">
+                                        <TextBlock Grid.Column="0"
+                                                   Classes="caption"
+                                                   Text="{Binding Title}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Classes="caption"
+                                                   Text="{Binding Count}"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
+                                </TreeDataTemplate>
+
+                                <!-- Local branch. The current one carries a tick; one
+                                     held by a worktree is labelled, because selecting it
+                                     jumps to that worktree rather than checking out —
+                                     git will not check a branch out twice. -->
+                                <DataTemplate DataType="vm:BranchNodeViewModel">
+                                    <Grid ColumnDefinitions="Auto,*,Auto"
+                                          ColumnSpacing="7"
+                                          x:CompileBindings="False">
+                                        <Path Grid.Column="0"
+                                              Classes="icon sm success"
+                                              Data="{DynamicResource IconCheck}"
+                                              VerticalAlignment="Center"
+                                              IsVisible="{Binding IsCurrent}"/>
+
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding DisplayName}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Classes.active="{Binding IsCurrent}"/>
+
+                                        <Border Grid.Column="2"
+                                                Classes="badge"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding HasWorktree}"
+                                                ToolTip.Tip="Checked out in a worktree. Selecting this opens it.">
+                                            <TextBlock Text="WORKTREE"/>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </TreeView.DataTemplates>
+                        </TreeView>
                     </Panel>
 
-                    <!-- Tags + Stash below branches -->
+                    <!-- Tags + Stash -->
                     <StackPanel Grid.Row="2">
 
                     <!-- Tags section -->
@@ -1865,6 +2042,73 @@
                 IsVisible="{Binding IsCreatePrVisible}">
             <controls:CreatePrDialog HorizontalAlignment="Center"
                                       VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- ── Create worktree dialog overlay ────────────────────────────── -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="140"
+                Classes="scrim"
+                IsVisible="{Binding IsCreateWorktreeVisible}">
+            <Border Classes="card"
+                    Width="520"
+                    Padding="20"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="New worktree" FontSize="{DynamicResource FontSizeSubtitle}"/>
+                    <TextBlock Classes="caption"
+                               TextWrapping="Wrap"
+                               Text="A worktree is a second checkout of this repository, fixed to one branch. It cannot be switched to another branch afterwards — create another worktree instead."/>
+
+                    <CheckBox Content="Create a new branch"
+                              IsChecked="{Binding NewWorktreeCreatesBranch, Mode=TwoWay}"/>
+
+                    <StackPanel Spacing="5">
+                        <TextBlock Classes="caption" Text="BRANCH"/>
+
+                        <!-- Existing branches only ever list ones with no worktree yet;
+                             git refuses to check a branch out twice, so offering a taken
+                             branch would only fail on submit. -->
+                        <ComboBox HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding AvailableWorktreeBranches}"
+                                  SelectedItem="{Binding NewWorktreeBranch, Mode=TwoWay}"
+                                  IsVisible="{Binding !NewWorktreeCreatesBranch}"/>
+
+                        <TextBox Text="{Binding NewWorktreeBranch, Mode=TwoWay}"
+                                 Watermark="feature/my-change"
+                                 IsVisible="{Binding NewWorktreeCreatesBranch}"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="5" IsVisible="{Binding NewWorktreeCreatesBranch}">
+                        <TextBlock Classes="caption" Text="START POINT (BLANK = CURRENT HEAD)"/>
+                        <TextBox Text="{Binding NewWorktreeStartPoint, Mode=TwoWay}"
+                                 Watermark="master"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="5">
+                        <TextBlock Classes="caption" Text="DIRECTORY"/>
+                        <TextBox Text="{Binding NewWorktreePath, Mode=TwoWay}"/>
+                        <TextBlock Classes="caption"
+                                   TextWrapping="Wrap"
+                                   Text="Defaults to a sibling folder so the worktree never appears as untracked files inside the repository."/>
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding CreateWorktreeError}"
+                               IsVisible="{Binding HasCreateWorktreeError}"
+                               Foreground="{DynamicResource DangerFgBrush}"
+                               TextWrapping="Wrap"/>
+
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8"
+                                HorizontalAlignment="Right">
+                        <Button Content="Cancel"
+                                Command="{Binding CancelCreateWorktreeCommand}"/>
+                        <Button Classes="primary"
+                                Content="Create worktree"
+                                Command="{Binding ConfirmCreateWorktreeCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </Border>
 
         <!-- ── Settings panel overlay ──────────────────────────────────────── -->

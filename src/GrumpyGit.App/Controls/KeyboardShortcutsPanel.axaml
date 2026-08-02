@@ -65,7 +65,7 @@
                         </Grid>
                         <Grid Classes="shortcut" ColumnDefinitions="150,*">
                             <Border Classes="kbd"><TextBlock Text="Ctrl+Tab"/></Border>
-                            <TextBlock Grid.Column="1" Text="Next repository tab"/>
+                            <TextBlock Grid.Column="1" Text="Next repository or worktree"/>
                         </Grid>
                     </StackPanel>
 
