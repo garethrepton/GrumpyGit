@@ -53,6 +53,55 @@ public partial class MainWindow : Window
         WireKeyboardShortcuts();
         WireBlameViewer();
         WireFileTree();
+        WireGraphPanel();
+    }
+
+    // ── Commit graph panel ────────────────────────────────────────────────────
+
+    private ScrollViewer? _commitScroll;
+
+    /// <summary>
+    /// Joins the standalone graph to the commit list: the panel follows the list's
+    /// scroll offset, and clicking a node selects that commit.
+    ///
+    /// The graph deliberately has no scrollbar of its own — two scrollables would have to
+    /// be kept in step in both directions, and any disagreement shows up as the graph
+    /// sliding out of line with the rows it describes.
+    /// </summary>
+    private void WireGraphPanel()
+    {
+        var list = this.FindControl<ListBox>("CommitListBox");
+        var panel = this.FindControl<CommitGraphPanel>("GraphPanel");
+        if (list is null || panel is null) return;
+
+        panel.CommitClicked += (_, hash) =>
+        {
+            if (DataContext is not MainWindowViewModel vm) return;
+
+            var row = vm.Commits.FirstOrDefault(
+                c => string.Equals(c.Hash, hash, StringComparison.Ordinal));
+            if (row is not null)
+                vm.SelectedCommit = row;
+        };
+
+        // The ScrollViewer is inside the ListBox's template, which is not applied until
+        // the list has been laid out — and the list starts collapsed with no repository
+        // open, so it can be several layout passes away. Retry until it appears, then
+        // stop listening.
+        void TryAttach(object? sender, EventArgs e)
+        {
+            if (_commitScroll is not null) return;
+
+            _commitScroll = list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+            if (_commitScroll is null) return;
+
+            list.LayoutUpdated -= TryAttach;
+            _commitScroll.ScrollChanged += (_, _) =>
+                panel.ScrollOffset = _commitScroll.Offset.Y;
+            panel.ScrollOffset = _commitScroll.Offset.Y;
+        }
+
+        list.LayoutUpdated += TryAttach;
     }
 
     /// <summary>

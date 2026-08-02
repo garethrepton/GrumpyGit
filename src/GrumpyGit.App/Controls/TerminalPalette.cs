@@ -14,7 +14,7 @@ namespace GrumpyGit.App.Controls;
 /// green that is legible on the current background, not a fixed 1980s CRT value.
 /// <para>
 /// Brushes are cached and keyed on the active theme variant, exactly as
-/// <see cref="CommitGraphCell"/> caches its lane palette: resolution happens once per
+/// <see cref="CommitGraphPanel"/> caches its lane palette: resolution happens once per
 /// visible span per frame, which is far too hot for a dictionary lookup, and a cache that
 /// ignored the variant would freeze whichever theme was live at first paint.
 /// </para>

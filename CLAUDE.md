@@ -116,9 +116,25 @@ GrumpyGit/
 
 ---
 
+## The Council
+
+Six project-local agents in `.claude/agents/`, each holding one seat. Convene them — in parallel —
+for any non-trivial change; they are meant to disagree, and the disagreement is the point.
+
+| Seat | Owns | Voice |
+|---|---|---|
+| `product-owner` | Whether it should exist at all | Mostly says no |
+| `architect` | Where it belongs; the Core/UI boundary and settled decisions | Decides, does not code |
+| `staff-engineer` | The hard changes: git backend, lane assignment, diffs, performance | Implements and reviews |
+| `mid-level-engineer` | Well-specified work, following existing patterns | Asks rather than invents |
+| `ui-designer` | Commit graph, diff viewer, staging flow, theming | Argues for less on screen |
+| `security-expert` | Commandments 1, 5 and 9 | **Blocking** — the others defer |
+
+The security expert's verdict is blocking. The rest advise; you decide.
+
 ## Available Agents
 
-Use these agents in parallel when working on independent tasks. Invoke multiple agents simultaneously where possible. These agents are available in the global agent store.
+These general-purpose agents live in the global agent store and serve every project. Use them in parallel when working on independent tasks.
 
 ### `dotnet-tool`
 Use for: scaffolding projects, adding NuGet packages, running builds and tests, project configuration, `dotnet` CLI tasks.

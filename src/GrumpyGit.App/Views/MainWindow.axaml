@@ -142,6 +142,17 @@
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
             <Setter Property="Padding" Value="0,1"/>
         </Style>
+
+        <!-- Commit rows are a fixed height so the standalone graph panel can line up
+             with them. The panel is handed the list's scroll offset and draws the
+             matching window; with variable-height rows there would be no offset it
+             could turn into a row index. Keep in sync with CommitGraphPanel.RowHeight. -->
+        <Style Selector="ListBox#CommitListBox ListBoxItem">
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
     </Window.Styles>
 
     <!-- ═══════════════════════════════════════════════════════════════════════
@@ -767,7 +778,146 @@
                                 </StackPanel>
                             </DockPanel>
                         </Border>
-                        <Panel Grid.Row="3">
+                        <Grid Grid.Row="3" ColumnDefinitions="Auto,*">
+
+                            <!-- ── The graph window ────────────────────────────
+                                 The graph used to be a cell inside each list row,
+                                 which meant it could only ever see one row and so
+                                 could not express anything spanning them — least of
+                                 all filtering a branch out. Standing it up as its
+                                 own control makes the key, the show/hide toggles and
+                                 branch mode possible, and costs one Render per frame
+                                 instead of one per visible row.
+
+                                 It does not scroll itself: it is handed the list's
+                                 scroll offset and draws the matching window, which
+                                 is why the list has a fixed row height. -->
+                            <Border Grid.Column="0"
+                                    Classes="chrome"
+                                    BorderThickness="0,0,1,0"
+                                    MinWidth="200"
+                                    MaxWidth="340"
+                                    IsVisible="{Binding IsGraphVisible}">
+                                <Grid RowDefinitions="Auto,*,Auto">
+
+                                    <!-- Branch mode banner -->
+                                    <Border Grid.Row="0"
+                                            Padding="8,5"
+                                            Background="{DynamicResource InfoBgBrush}"
+                                            IsVisible="{Binding IsBranchMode}">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right"
+                                                    Classes="subtle icon-only"
+                                                    Padding="2"
+                                                    VerticalAlignment="Center"
+                                                    Command="{Binding ClearBranchModeCommand}"
+                                                    ToolTip.Tip="Show all branches again">
+                                                <Path Classes="icon sm" Data="{DynamicResource IconClose}"/>
+                                            </Button>
+                                            <TextBlock Text="{Binding BranchModeSummary}"
+                                                       Foreground="{DynamicResource InfoFgBrush}"
+                                                       FontSize="{DynamicResource FontSizeLabel}"
+                                                       TextWrapping="Wrap"
+                                                       VerticalAlignment="Center"/>
+                                        </DockPanel>
+                                    </Border>
+
+                                    <ScrollViewer Grid.Row="1"
+                                                  HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Disabled">
+                                        <controls:CommitGraphPanel
+                                            x:Name="GraphPanel"
+                                            Nodes="{Binding GraphNodes}"
+                                            TotalLanes="{Binding GraphTotalLanes}"
+                                            RowOffset="{Binding GraphRowOffset}"
+                                            BranchColors="{Binding BranchColors}"
+                                            SelectedHash="{Binding SelectedCommit.Hash}"/>
+                                    </ScrollViewer>
+
+                                    <!-- ── Key ─────────────────────────────────
+                                         Tick to show or hide a branch; click the
+                                         name to isolate it with branch mode. -->
+                                    <Border Grid.Row="2"
+                                            BorderThickness="0,1,0,0"
+                                            BorderBrush="{DynamicResource BorderSubtleBrush}">
+                                        <Grid RowDefinitions="Auto,Auto">
+                                            <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+                                                <TextBlock Grid.Column="0"
+                                                           Classes="panel-header"
+                                                           Text="BRANCHES"/>
+                                                <Button Grid.Column="1"
+                                                        Classes="subtle sm"
+                                                        Content="All"
+                                                        Padding="6,1"
+                                                        Margin="0,0,4,0"
+                                                        VerticalAlignment="Center"
+                                                        Command="{Binding ShowAllBranchesCommand}"
+                                                        ToolTip.Tip="Show every branch again"/>
+                                                <Button Grid.Column="2"
+                                                        Classes="subtle icon-only"
+                                                        Padding="2"
+                                                        Margin="0,0,6,0"
+                                                        VerticalAlignment="Center"
+                                                        Command="{Binding ToggleGraphKeyCommand}"
+                                                        ToolTip.Tip="Collapse the key">
+                                                    <Path Classes="icon sm" Data="{DynamicResource IconChevronDown}"/>
+                                                </Button>
+                                            </Grid>
+
+                                            <ScrollViewer Grid.Row="1"
+                                                          MaxHeight="200"
+                                                          IsVisible="{Binding IsGraphKeyVisible}"
+                                                          VerticalScrollBarVisibility="Auto"
+                                                          HorizontalScrollBarVisibility="Disabled">
+                                                <ItemsControl ItemsSource="{Binding GraphLegend}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:BranchLegendEntryViewModel"
+                                                                      x:CompileBindings="False">
+                                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto"
+                                                                  ColumnSpacing="6"
+                                                                  Margin="8,1">
+                                                                <CheckBox Grid.Column="0"
+                                                                          MinWidth="0"
+                                                                          Padding="0"
+                                                                          VerticalAlignment="Center"
+                                                                          IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                                          ToolTip.Tip="Show or hide this branch"/>
+
+                                                                <Border Grid.Column="1"
+                                                                        Width="10" Height="10"
+                                                                        CornerRadius="5"
+                                                                        VerticalAlignment="Center"
+                                                                        Background="{Binding ColorSlot, Converter={x:Static controls:BranchSlotBrushConverter.Instance}}"/>
+
+                                                                <Button Grid.Column="2"
+                                                                        Classes="subtle"
+                                                                        Padding="2,0"
+                                                                        HorizontalAlignment="Stretch"
+                                                                        HorizontalContentAlignment="Left"
+                                                                        CommandParameter="{Binding Name}"
+                                                                        Command="{Binding DataContext.SetBranchModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                        ToolTip.Tip="Branch mode: show only this branch's own commits and the merges into it">
+                                                                    <TextBlock Text="{Binding Name}"
+                                                                               FontSize="{DynamicResource FontSizeLabel}"
+                                                                               TextTrimming="CharacterEllipsis"
+                                                                               Classes.active="{Binding IsBranchModeTarget}"/>
+                                                                </Button>
+
+                                                                <TextBlock Grid.Column="3"
+                                                                           Classes="caption"
+                                                                           Text="{Binding CommitCount}"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <Panel Grid.Column="1">
                             <StackPanel Classes="empty-state"
                                         IsVisible="{Binding !Commits.Count}">
                                 <Path Classes="icon" Data="{DynamicResource IconCommit}"/>
@@ -785,7 +935,14 @@
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CommitRowViewModel"
                                                   x:CompileBindings="False">
-                                        <!-- rule | graph | sha | refs | subject | ai | unpushed | author | date -->
+                                        <!-- The row is washed with its branch's key colour so a
+                                             line of development can be followed down the list
+                                             without tracing lanes. Kept very low alpha: it has to
+                                             sit under the selected and hover states rather than
+                                             compete with them. Column 1 is the old graph cell's
+                                             slot, left empty so the later column indices stand. -->
+                                        <Border Background="{Binding BranchColorSlot, Converter={x:Static controls:BranchSlotTintConverter.Instance}}">
+                                        <!-- rule | (graph) | sha | refs | subject | ai | unpushed | author | date -->
                                         <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto"
                                               MinHeight="20">
                                             <Grid.ContextMenu>
@@ -815,12 +972,6 @@
                                             <Border Grid.Column="0"
                                                     Classes="row-rule"
                                                     Margin="0,2,8,2"/>
-
-                                            <controls:CommitGraphCell Grid.Column="1"
-                                                Segments="{Binding Segments}"
-                                                Lane="{Binding Lane}"
-                                                TotalLanes="{Binding TotalLanes}"
-                                                IsVisible="{Binding DataContext.IsGraphVisible, ElementName=CommitListBox}"/>
 
                                             <!-- Dim mono SHA: present for reference, never the thing you read first -->
                                             <TextBlock Grid.Column="2"
@@ -909,6 +1060,7 @@
                                                        Margin="12,0,4,0"
                                                        VerticalAlignment="Center"/>
                                         </Grid>
+                                        </Border>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
@@ -919,7 +1071,8 @@
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Bottom"
                                     Margin="0,0,0,10"/>
-                        </Panel>
+                            </Panel>
+                        </Grid>
                     </Grid>
                 </Border>
 

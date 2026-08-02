@@ -570,21 +570,6 @@ public partial class MainWindowViewModel : ViewModelBase
             RebuildAiSessions(commitsTask.Result);
             InitialiseReviewTools();
 
-            var nodes = GraphLayoutEngine.Compute(commitsTask.Result);
-
-            // Compute the total number of active lanes for sizing the graph column
-            int maxLane = 0;
-            foreach (var node in nodes)
-            {
-                if (node.Lane > maxLane) maxLane = node.Lane;
-                foreach (var seg in node.Segments)
-                {
-                    if (seg.FromLane > maxLane) maxLane = seg.FromLane;
-                    if (seg.ToLane > maxLane) maxLane = seg.ToLane;
-                }
-            }
-            int totalLanes = maxLane + 1;
-
             StashEntries.Clear();
             foreach (var s in stashTask.Result)
                 StashEntries.Add(s);
@@ -597,30 +582,13 @@ public partial class MainWindowViewModel : ViewModelBase
             if (ActiveNode is not null)
                 ActiveNode.PendingChanges = workingFiles.Count;
 
-            Commits.Add(new CommitRowViewModel
-            {
-                Hash = CommitRowViewModel.WorkingTreeHash,
-                Subject = workingFiles.Count > 0
-                    ? $"  Working Changes  ({workingFiles.Count} file(s))"
-                    : "  Working Tree  (clean)",
-                TotalLanes = totalLanes
-            });
-
-            // Paged loading — store all nodes but only render first page
-            _allGraphNodes = nodes;
-            _totalLanes = totalLanes;
-            _loadedCommitCount = 0;
-            LoadNextCommitPage();
-
-            // Land on the working-tree row. Switching to a repository is nearly always a
-            // question about what is uncommitted there, and selecting nothing left the
-            // file list and diff pane blank until the user clicked the top row anyway.
-            // Assigning it fires OnSelectedCommitChanged, which loads the file list.
-            SelectedCommit = Commits.FirstOrDefault(c => c.IsWorkingTree);
+            // Builds the key, applies the current filters, lays the graph out and fills
+            // the commit list — including the working-tree row and the initial selection.
+            InitialiseGraph(commitsTask.Result);
 
             // The AI-session count used to be appended here. It advertised a panel that
             // can no longer be opened, so it read as a broken promise.
-            StatusMessage = $"Loaded {nodes.Count} commit(s)";
+            StatusMessage = $"Loaded {FilteredCommitSummary}";
 
             // Check for rebase in progress
             IsRebaseInProgress = await _git.IsRebaseInProgressAsync(RepoPath);
@@ -1050,9 +1018,16 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // ── Mapping helpers ───────────────────────────────────────────────────────
 
-    private CommitRowViewModel ToCommitRowViewModel(GraphNode node, int totalLanes)
+    private CommitRowViewModel ToCommitRowViewModel(GraphNode node)
     {
         _aiAttributions.TryGetValue(node.Hash, out var ai);
+
+        var branch = node.BranchLabel;
+        var slot = branch is not null && BranchColors is not null
+                   && BranchColors.TryGetValue(branch, out var s)
+            ? s
+            : -1;
+
         return new CommitRowViewModel
         {
             Hash = node.Hash,
@@ -1060,9 +1035,8 @@ public partial class MainWindowViewModel : ViewModelBase
             AuthorName = node.AuthorName,
             AuthorDate = node.AuthorDate,
             RefNames = node.RefNames,
-            Lane = node.Lane,
-            Segments = node.Segments,
-            TotalLanes = totalLanes,
+            BranchLabel = branch ?? string.Empty,
+            BranchColorSlot = slot,
             IsMergeCommit = node.ParentHashes.Length > 1,
             AiAgentName = ai?.AgentName ?? string.Empty,
             AiEvidenceDetail = ai?.Detail ?? string.Empty,
@@ -1076,7 +1050,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         int end = Math.Min(_loadedCommitCount + CommitPageSize, _allGraphNodes.Count);
         for (int i = _loadedCommitCount; i < end; i++)
-            Commits.Add(ToCommitRowViewModel(_allGraphNodes[i], _totalLanes));
+            Commits.Add(ToCommitRowViewModel(_allGraphNodes[i]));
         _loadedCommitCount = end;
         CanLoadMoreCommits = _loadedCommitCount < _allGraphNodes.Count;
     }

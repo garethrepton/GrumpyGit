@@ -16,13 +16,20 @@ public partial class CommitRowViewModel : ObservableObject
     public string AuthorName { get; init; } = string.Empty;
     public DateTimeOffset AuthorDate { get; init; }
     public string[] RefNames { get; init; } = [];
-    public int Lane { get; init; }
 
-    /// <summary>Graph segments for this row, used by CommitGraphCell to render lane lines.</summary>
-    public IReadOnlyList<GraphSegment> Segments { get; init; } = [];
+    // Lane / Segments / TotalLanes lived here while the graph was drawn per row. The
+    // graph is its own control now and reads GraphNode directly, so keeping them would
+    // have pinned a segment list per row for the whole history.
 
-    /// <summary>Total number of active lanes across the whole graph (used to size the graph column).</summary>
-    public int TotalLanes { get; init; } = 1;
+    /// <summary>Branch this commit is attributed to, or empty when it cannot be inferred.</summary>
+    public string BranchLabel { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Palette slot of <see cref="BranchLabel"/>, or -1 when unknown. Drives the row's
+    /// background wash, and comes from the same assignment as the graph key so a row and
+    /// its lane are never different colours.
+    /// </summary>
+    public int BranchColorSlot { get; init; } = -1;
 
     public bool IsWorkingTree => Hash == WorkingTreeHash;
 
