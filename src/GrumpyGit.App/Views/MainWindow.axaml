@@ -236,11 +236,6 @@
                         <Path Classes="icon" Data="{DynamicResource IconTerminal}"/>
                     </Button>
                     <Button Classes="icon-only"
-                            Command="{Binding TogglePrPanelCommand}"
-                            ToolTip.Tip="Toggle pull requests panel">
-                        <Path Classes="icon" Data="{DynamicResource IconPullRequest}"/>
-                    </Button>
-                    <Button Classes="icon-only"
                             Command="{Binding ToggleSettingsCommand}"
                             ToolTip.Tip="Settings (Ctrl+,)">
                         <Path Classes="icon" Data="{DynamicResource IconSettings}"/>
@@ -1630,11 +1625,11 @@
 
                     <!-- Diff / Blame Viewer ────────────────────────────── -->
                     <Border Grid.Column="2" Background="{DynamicResource EditorBgBrush}">
-                        <!-- header | linked issues | staging strip | staging notice | viewer.
+                        <!-- header | staging strip | staging notice | change summary | viewer.
                              Each strip gets its own row: they can be visible at the same
-                             time, so sharing a row would overlap them. -->
-                        <!-- Row 4 is the change summary; the diff itself is the star row. -->
-                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+                             time, so sharing a row would overlap them. The diff itself is
+                             the star row. -->
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
                             <Border Grid.Row="0" Classes="pane-header">
                                 <DockPanel>
                                     <StackPanel Orientation="Horizontal"
@@ -1796,55 +1791,11 @@
                                 </DockPanel>
                             </Border>
 
-                            <!-- Linked issues (user-triggered fetch). The strip only
-                                 occupies space when there is actually an action or a
-                                 result to show. -->
-                            <Border Grid.Row="1"
-                                    Padding="12,6"
-                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    IsVisible="{Binding !IsWorkingTreeSelected}">
-                                <Button Classes="subtle sm"
-                                        Command="{Binding FetchLinkedIssuesCommand}"
-                                        IsVisible="{Binding !LinkedIssues.Count}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Path Classes="icon sm" Data="{DynamicResource IconFetch}"/>
-                                        <TextBlock Text="Fetch Linked Issues" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                            </Border>
-                            <ItemsControl Grid.Row="1"
-                                          ItemsSource="{Binding LinkedIssues}"
-                                          IsVisible="{Binding !!LinkedIssues.Count}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:IssueViewModel">
-                                        <Border Background="{DynamicResource InfoBgBrush}"
-                                                Padding="12,5"
-                                                Margin="0,0,0,1">
-                                            <DockPanel>
-                                                <Border DockPanel.Dock="Left"
-                                                        Classes="badge"
-                                                        Background="{DynamicResource BgRaisedBrush}"
-                                                        Margin="0,0,8,0">
-                                                    <TextBlock Text="{Binding State}"
-                                                               Foreground="{DynamicResource InfoFgBrush}"/>
-                                                </Border>
-                                                <TextBlock Text="{Binding DisplayText}"
-                                                           Foreground="{DynamicResource InfoFgBrush}"
-                                                           FontSize="{DynamicResource FontSizeLabel}"
-                                                           VerticalAlignment="Center"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                            </DockPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-
                             <!-- ── Focused staging strip ───────────────────────────
                                  Full-screen mode hides the file lists, so stage/unstage
                                  and file navigation have to live here or the mode would
                                  be read-only and you'd be stuck on one file. -->
-                            <Border Grid.Row="2"
+                            <Border Grid.Row="1"
                                     Background="{DynamicResource BgRaisedBrush}"
                                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                                     BorderThickness="0,0,0,1"
@@ -1919,7 +1870,7 @@
 
                             <!-- Why staging is unavailable, rather than silently
                                  hiding the buttons and leaving the user confused -->
-                            <Border Grid.Row="3"
+                            <Border Grid.Row="2"
                                     Background="{DynamicResource InfoBgBrush}"
                                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                                     BorderThickness="0,0,0,1"
@@ -1940,7 +1891,7 @@
                                  What changed, by symbol, before you read a single line of
                                  the diff. Capped in height and horizontally scrolling so a
                                  large refactor cannot push the diff itself off screen. -->
-                            <Border Grid.Row="4"
+                            <Border Grid.Row="3"
                                     Background="{DynamicResource BgSurfaceBrush}"
                                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                                     BorderThickness="0,0,0,1"
@@ -2016,7 +1967,7 @@
                             </Border>
 
                             <!-- Diff view (default) -->
-                            <controls:DiffViewer Grid.Row="5"
+                            <controls:DiffViewer Grid.Row="4"
                                                  x:Name="DiffViewerControl"
                                                  Diff="{Binding CurrentDiff}"
                                                  FilePath="{Binding DiffFilePath}"
@@ -2029,20 +1980,20 @@
                                                  IsVisible="{Binding IsTextDiffVisible}"/>
 
                             <!-- Image preview replaces the text diff for picture files -->
-                            <controls:ImageDiffViewer Grid.Row="5"
+                            <controls:ImageDiffViewer Grid.Row="4"
                                                       DataContext="{Binding ImageDiff}"
                                                       IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).IsImageDiff}"/>
 
                             <!-- Blame view (alternative) -->
                             <controls:BlameViewer x:Name="BlameViewerControl"
-                                                  Grid.Row="5"
+                                                  Grid.Row="4"
                                                   BlameData="{Binding BlameData}"
                                                   FilePath="{Binding BlameFilePath}"
                                                   IsVisible="{Binding IsBlameVisible}"/>
 
                             <!-- Empty state, declared last so it paints over the
                                  (opaque) editor surface when nothing is selected -->
-                            <Border Grid.Row="2"
+                            <Border Grid.Row="1"
                                     Background="{DynamicResource EditorBgBrush}"
                                     IsVisible="{Binding DiffFilePath, Converter={x:Static StringConverters.IsNullOrEmpty}}">
                                 <StackPanel Classes="empty-state">
@@ -2179,30 +2130,6 @@
             <controls:ConflictResolver HorizontalAlignment="Stretch"
                                         VerticalAlignment="Stretch"
                                         Margin="24"/>
-        </Border>
-
-        <!-- ── Pull Requests panel overlay ────────────────────────────────── -->
-        <Border Grid.Row="0" Grid.RowSpan="6"
-                ZIndex="110"
-                Classes="scrim"
-                IsVisible="{Binding IsPrPanelVisible}">
-            <Border Classes="card"
-                    MaxWidth="600"
-                    MaxHeight="500"
-                    ClipToBounds="True"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-                <controls:PullRequestPanel/>
-            </Border>
-        </Border>
-
-        <!-- ── Create PR dialog overlay ──────────────────────────────────── -->
-        <Border Grid.Row="0" Grid.RowSpan="6"
-                ZIndex="135"
-                Classes="scrim"
-                IsVisible="{Binding IsCreatePrVisible}">
-            <controls:CreatePrDialog HorizontalAlignment="Center"
-                                      VerticalAlignment="Center"/>
         </Border>
 
         <!-- ── Create worktree dialog overlay ────────────────────────────── -->

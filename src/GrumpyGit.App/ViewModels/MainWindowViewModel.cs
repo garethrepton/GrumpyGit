@@ -26,7 +26,6 @@ public class ToastEventArgs : EventArgs
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly GitService _git = new();
-    private readonly GitHubService _github = new();
 
     // ── Toast notifications ─────────────────────────────────────────────────────
 
@@ -152,19 +151,6 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _fileHistoryPath = string.Empty;
     [ObservableProperty] private CommitRowViewModel? _selectedFileHistoryCommit;
 
-    // ── GitHub / Pull Requests ───────────────────────────────────────────────────
-
-    public ObservableCollection<PullRequestViewModel> PullRequests { get; } = new();
-    public ObservableCollection<IssueViewModel> LinkedIssues { get; } = new();
-    [ObservableProperty] private bool _isPrPanelVisible;
-    [ObservableProperty] private bool _isCreatePrVisible;
-    [ObservableProperty] private bool _isLoadingPrs;
-    [ObservableProperty] private string _newPrTitle = string.Empty;
-    [ObservableProperty] private string _newPrBody = string.Empty;
-    [ObservableProperty] private string? _newPrBaseBranch;
-    [ObservableProperty] private bool _newPrIsDraft;
-    private bool _prsFetched;
-
     // ── Repository tree ────────────────────────────────────────────────────────
     // RepoNodes, ActiveNode and the worktree commands live in
     // MainWindowViewModel.Repos.cs.
@@ -194,7 +180,6 @@ public partial class MainWindowViewModel : ViewModelBase
         ClearImageDiff();
         DiffFilePath = null;
         SelectedFile = null;
-        LinkedIssues.Clear();
         OnPropertyChanged(nameof(IsWorkingTreeSelected));
         if (value is not null)
         {
@@ -1636,141 +1621,6 @@ public partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             ShowToast($"Abort merge failed: {ex.Message}", ToastSeverity.Error, 6000);
-        }
-    }
-
-    // ── Commands: GitHub / Pull Requests ────────────────────────────────────
-
-    [RelayCommand]
-    private async Task TogglePrPanelAsync()
-    {
-        IsPrPanelVisible = !IsPrPanelVisible;
-        if (IsPrPanelVisible && !_prsFetched)
-            await LoadPullRequestsAsync();
-    }
-
-    [RelayCommand]
-    private async Task RefreshPrsAsync()
-    {
-        await LoadPullRequestsAsync();
-    }
-
-    private async Task LoadPullRequestsAsync()
-    {
-        if (string.IsNullOrEmpty(RepoPath)) return;
-        IsLoadingPrs = true;
-        try
-        {
-            var prs = await _github.GetPullRequestsAsync(RepoPath);
-            PullRequests.Clear();
-            foreach (var pr in prs)
-            {
-                var labels = pr.Labels?.Select(l => l.Name) ?? Enumerable.Empty<string>();
-                PullRequests.Add(new PullRequestViewModel
-                {
-                    Number = pr.Number,
-                    Title = pr.Title,
-                    AuthorLogin = pr.User?.Login ?? "unknown",
-                    State = pr.State.StringValue,
-                    CreatedAt = pr.CreatedAt,
-                    HeadBranch = pr.Head?.Ref ?? string.Empty,
-                    BaseBranch = pr.Base?.Ref ?? string.Empty,
-                    IsDraft = pr.Draft,
-                    Labels = string.Join(", ", labels)
-                });
-            }
-            _prsFetched = true;
-            StatusMessage = $"{prs.Count} open PR(s)";
-        }
-        catch (Exception ex)
-        {
-            ShowToast($"Load PRs failed: {ex.Message}", ToastSeverity.Error, 6000);
-        }
-        finally
-        {
-            IsLoadingPrs = false;
-        }
-    }
-
-    [RelayCommand]
-    private void ShowCreatePr()
-    {
-        NewPrTitle = string.Empty;
-        NewPrBody = string.Empty;
-        NewPrBaseBranch = Branches.FirstOrDefault(b => b == "main")
-                          ?? Branches.FirstOrDefault(b => b == "master")
-                          ?? Branches.FirstOrDefault();
-        NewPrIsDraft = false;
-        IsCreatePrVisible = true;
-    }
-
-    [RelayCommand]
-    private void CancelCreatePr()
-    {
-        IsCreatePrVisible = false;
-    }
-
-    [RelayCommand]
-    private async Task SubmitPrAsync()
-    {
-        if (string.IsNullOrEmpty(RepoPath) || string.IsNullOrWhiteSpace(NewPrTitle) || string.IsNullOrEmpty(NewPrBaseBranch))
-        {
-            ShowToast("Title and base branch are required.", ToastSeverity.Warning);
-            return;
-        }
-
-        StatusMessage = "Creating pull request...";
-        try
-        {
-            var pr = await _github.CreatePullRequestAsync(
-                RepoPath, NewPrTitle.Trim(), NewPrBody.Trim(), CurrentBranch, NewPrBaseBranch, NewPrIsDraft);
-            IsCreatePrVisible = false;
-            ShowToast($"PR #{pr.Number} created: {pr.Title}", ToastSeverity.Success, 6000);
-            _prsFetched = false;
-            if (IsPrPanelVisible)
-                await LoadPullRequestsAsync();
-        }
-        catch (Exception ex)
-        {
-            ShowToast($"Create PR failed: {ex.Message}", ToastSeverity.Error, 8000);
-        }
-    }
-
-    // ── Issue linking (scan commit subject for #N references) ───────────────
-
-    [RelayCommand]
-    private async Task FetchLinkedIssuesAsync()
-    {
-        if (SelectedCommit is null || SelectedCommit.IsWorkingTree) return;
-        await LoadLinkedIssuesAsync(SelectedCommit.Subject);
-    }
-
-    private async Task LoadLinkedIssuesAsync(string commitSubject)
-    {
-        if (string.IsNullOrEmpty(RepoPath)) return;
-
-        var issueNumbers = GitHubService.ParseIssueReferences(commitSubject);
-        if (issueNumbers.Count == 0) return;
-
-        try
-        {
-            var issues = await _github.GetIssuesByNumbersAsync(RepoPath, issueNumbers);
-            LinkedIssues.Clear();
-            foreach (var issue in issues)
-            {
-                var labels = issue.Labels?.Select(l => l.Name) ?? Enumerable.Empty<string>();
-                LinkedIssues.Add(new IssueViewModel
-                {
-                    Number = issue.Number,
-                    Title = issue.Title,
-                    State = issue.State.StringValue,
-                    Labels = string.Join(", ", labels)
-                });
-            }
-        }
-        catch
-        {
-            // Issue linking is non-critical — silently ignore errors
         }
     }
 

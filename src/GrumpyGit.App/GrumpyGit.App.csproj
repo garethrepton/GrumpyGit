@@ -39,7 +39,6 @@
     <PackageReference Include="AvaloniaEdit.TextMate" Version="11.4.1" />
     <PackageReference Include="CliWrap" Version="3.10.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="Octokit" Version="14.0.0" />
     <PackageReference Include="TextMateSharp.Grammars" Version="2.0.3" />
   </ItemGroup>
 
