@@ -56,7 +56,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-SetupIconFile=..\src\GrumpyGit.App\Assets\grumpy.ico
+SetupIconFile=..\src\GrumpyGit.App\Assets\sheep.ico
 
 ; ── Uninstall ───────────────────────────────────────────────────────────────
 UninstallDisplayName={#AppName}

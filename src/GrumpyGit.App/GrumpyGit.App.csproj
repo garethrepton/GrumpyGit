@@ -13,7 +13,7 @@
          references avares://Grumpy/... and must be kept in step with this. -->
     <AssemblyName>Grumpy</AssemblyName>
     <RootNamespace>GrumpyGit.App</RootNamespace>
-    <ApplicationIcon>Assets\grumpy.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\sheep.ico</ApplicationIcon>
 
     <Product>Grumpy</Product>
     <AssemblyTitle>Grumpy</AssemblyTitle>

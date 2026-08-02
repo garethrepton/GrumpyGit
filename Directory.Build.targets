@@ -1,0 +1,23 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- Avalonia.BuildServices arrives transitively with Avalonia and registers AvaloniaStatsTask,
+         which runs BeforeTargets="CoreCompile" on every build. Its collector posts project name,
+         target framework, runtime identifier, Avalonia version and output type to
+         av-build-tel-api-v1.avaloniaui.net.
+
+         Commandment 1: the agreed outbound surface is git.exe push/pull and nothing else. An
+         outbound call that arrives through a dependency is the same decision taken sideways, so it
+         is closed here rather than tolerated because nobody wrote the call.
+
+         The task's only gate is UsedAvaloniaProducts, which Avalonia.props sets to ';AvaloniaUI'.
+         Clearing it closes the condition, and unlike the AVALONIA_TELEMETRY_OPTOUT environment
+         variable the task also honours, it stays true of a fresh clone and of CI.
+
+         This has to be Directory.Build.targets, not .props: props is imported before the
+         NuGet-generated imports, so Avalonia.props would simply set the property again afterwards.
+         Verify with:  dotnet msbuild src\GrumpyGit.App -getProperty:UsedAvaloniaProducts  -->
+    <UsedAvaloniaProducts></UsedAvaloniaProducts>
+  </PropertyGroup>
+
+</Project>

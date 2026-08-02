@@ -8,7 +8,7 @@
         d:DesignWidth="1200" d:DesignHeight="700"
         x:Class="GrumpyGit.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/grumpy.ico"
+        Icon="/Assets/sheep.ico"
         Title="Grumpy"
         Background="{DynamicResource BgBaseBrush}"
         MinWidth="800"
