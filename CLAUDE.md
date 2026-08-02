@@ -132,6 +132,29 @@ for any non-trivial change; they are meant to disagree, and the disagreement is 
 
 The security expert's verdict is blocking. The rest advise; you decide.
 
+## Scans
+
+`Scans/` is the audit trail, and it is **retained** — reports accumulate, they are never overwritten
+or tidied away. A scan is worth having precisely because you can compare it with the one before it.
+
+Write a report after any change that touches the outside world: a git.exe invocation, a GitHub API
+call, anything credential-adjacent, a file written or deleted, a path built from repository content,
+or a new package reference. In practice that means the `security-expert` seat produces one whenever
+it is convened on such a change, and `network-audit` / `dangerous-code` output is folded into it
+rather than left in a terminal scrollback.
+
+- One file per scan, named `Scans/YYYY-MM-DD-<scope>.html` — e.g. `2026-08-02-staging-flow.html`.
+- **Self-contained HTML**: inline CSS, no scripts, no external fonts or CDNs.
+- Contents: what was scanned (commit or branch), every site found under each of the four headings —
+  **network**, **process/executable**, **filesystem**, **dependencies** — each with file, line and a
+  one-line verdict, then the overall SHIP / SHIP WITH CHANGES / DO NOT SHIP. For process sites,
+  record how arguments reach `git.exe`: as arguments, or built into a string (commandment 5).
+- Repo-relative paths only, and no machine names, user paths, tokens, or author names and email
+  addresses lifted from a test repository (commandment 9).
+
+`Scans/index.html` is a table of every report, newest first: date, scope, verdict, link. Add the row
+in the same change as the report, or the folder becomes a pile no one reads.
+
 ## Available Agents
 
 These general-purpose agents live in the global agent store and serve every project. Use them in parallel when working on independent tasks.
