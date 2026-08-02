@@ -508,6 +508,10 @@
                                                 <MenuItem Header="Prune stale worktrees"
                                                           Command="{Binding DataContext.PruneWorktreesCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
                                                 <Separator/>
+                                                <MenuItem Header="Open in Explorer"
+                                                          CommandParameter="{Binding}"
+                                                          Command="{Binding DataContext.OpenInExplorerCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+                                                <Separator/>
                                                 <MenuItem Header="Close repository"
                                                           CommandParameter="{Binding}"
                                                           Command="{Binding DataContext.CloseRepoNodeCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
@@ -552,6 +556,10 @@
                                           ToolTip.Tip="{Binding Path}">
                                         <Grid.ContextMenu>
                                             <ContextMenu>
+                                                <MenuItem Header="Open in Explorer"
+                                                          CommandParameter="{Binding}"
+                                                          Command="{Binding DataContext.OpenInExplorerCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+                                                <Separator/>
                                                 <MenuItem Header="Remove worktree"
                                                           CommandParameter="{Binding}"
                                                           Command="{Binding DataContext.RemoveWorktreeCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>

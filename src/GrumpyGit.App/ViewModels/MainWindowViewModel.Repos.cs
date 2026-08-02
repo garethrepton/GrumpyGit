@@ -8,6 +8,7 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GrumpyGit.App.Services;
+using GrumpyGit.Core.Shell;
 
 namespace GrumpyGit.App.ViewModels;
 
@@ -254,6 +255,26 @@ public partial class MainWindowViewModel
 
         var path = results[0].TryGetLocalPath() ?? results[0].Path.LocalPath;
         await OpenRepositoryAsync(path);
+    }
+
+    /// <summary>
+    /// Opens a checkout's directory in Explorer. Takes the base node so one command serves
+    /// both a repository root and a worktree; group headings and worktree-less branches
+    /// have no directory and are ignored.
+    /// </summary>
+    [RelayCommand]
+    private void OpenInExplorer(RepoTreeNodeViewModel? node)
+    {
+        if (node is null || string.IsNullOrEmpty(node.Path)) return;
+
+        try
+        {
+            FileExplorer.OpenDirectory(node.Path);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not open folder: {ex.Message}";
+        }
     }
 
     /// <summary>
