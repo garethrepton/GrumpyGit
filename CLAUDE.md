@@ -1,16 +1,16 @@
 # GrumpyGit — Visual Git Client
 
-A .NET desktop application providing a visual git client with GitHub integration. The goal is a first-class visual experience for browsing history, reviewing diffs, staging changes, and pushing to GitHub.
+A .NET desktop application providing a visual git client. The goal is a first-class visual experience for browsing history, reviewing diffs, staging changes, and pushing.
 
 ## What This App Does
 
-- Connect to a local or GitHub-hosted git repository
+- Connect to a local git repository
 - Render the commit history as an interactive DAG graph (branching tree)
 - Click a commit to see the files changed in that commit
 - Click a file to see the line-by-line diff (syntax highlighted)
 - View uncommitted local changes (working tree + index)
 - Stage whole files or individual hunks and commit
-- Push / pull to/from GitHub (via Git Credential Manager — no custom OAuth UI needed)
+- Push / pull to/from a remote (via Git Credential Manager — no custom auth UI needed)
 - Compare the full codebase between any two commits (spanning all commits in between)
 
 ---
@@ -21,21 +21,22 @@ These govern all work in this repo. They are not preferences — a change that b
 decision to raise, not to make quietly.
 
 1. **Thou shalt not call out unless it has explicitly been agreed.** The agreed outbound surface is
-   exactly two things: `git.exe` push/pull (credentials handled by Git Credential Manager) and the
-   GitHub API via Octokit. Nothing else — no telemetry, no update check, no analytics, no third
-   party endpoint — gets added on your own initiative, however convenient. Ask, get a yes, then
-   write it. Silence is a no. Run `network-audit` after any change that could have added one.
+   exactly one thing: `git.exe` push/pull, credentials handled by Git Credential Manager. Nothing
+   else — no API client, no telemetry, no update check, no analytics, no third party endpoint —
+   gets added on your own initiative, however convenient. Ask, get a yes, then write it. Silence is
+   a no. Run `network-audit` after any change that could have added one. A GitHub API client via
+   Octokit was once part of this surface and was **deliberately removed**; adding one back is a new
+   decision to be asked for, not a restoration.
 2. **Thou shalt keep outbound calls neatly abstracted.** Everything that touches the outside world —
-   `git.exe`, the GitHub API, the filesystem — lives behind its own type in its own file under
-   `GrumpyGit.Core/Git/` (or its Octokit equivalent), so the boundary is one grep away and
-   viewmodels stay testable without a real repository. No raw `CliWrap` or `Process.Start` calls,
-   and no Octokit client, scattered through UI or viewmodel code.
+   `git.exe`, the shell, the filesystem — lives behind its own type in its own file under
+   `GrumpyGit.Core/`, so the boundary is one grep away and viewmodels stay testable without a real
+   repository. No raw `CliWrap` or `Process.Start` calls scattered through UI or viewmodel code.
 3. **Thou shalt use the minimal amount of tools and code to achieve the goal.** Prefer no new
    dependency, then a smaller one; prefer extending an existing type to adding one. The stack in
    this file is deliberately short — every addition to it is a decision, so run `package-audit` and
    justify it. Delete rather than deprecate.
 4. **Thou shalt keep to SOLID where it earns its keep, and go functional where that is clearer.**
-   Interfaces exist to be seams for testing — a fake git backend, a fake GitHub client — not for
+   Interfaces exist to be seams for testing — a fake git backend — not for
    symmetry. A pure static function over immutable records beats a class hierarchy when there is no
    state to hold; graph lane assignment and diff parsing are pure transforms and should read as such.
 5. **Thou shalt allow no security concerns.** This must be safe to run in a production environment
@@ -73,7 +74,6 @@ decision to raise, not to make quietly.
 |---|---|---|
 | UI Framework | Avalonia (Skia-backed, Windows-first but cross-platform capable) | `Avalonia`, `Avalonia.Desktop` |
 | All git operations | Shell out to `git.exe` via CliWrap | `CliWrap` |
-| GitHub API (PRs, OAuth token, repo info) | Octokit.NET | `Octokit` |
 | Diff computation | DiffPlex | `DiffPlex` |
 | Code editor / diff viewer | AvaloniaEdit + TextMate grammars | `Avalonia.AvaloniaEdit`, `AvaloniaEdit.TextMate`, `TextMateSharp.Grammars` |
 | Commit graph rendering | Custom Avalonia `DrawingContext` (pvigier lane-assignment algorithm) | — |
@@ -81,9 +81,11 @@ decision to raise, not to make quietly.
 
 ### Key Architecture Decisions
 
-**100% CLI git backend:** All git operations go through `git.exe` via CliWrap. This is the same approach as GitHub Desktop, GitKraken, and Sourcetree. It gives us every git feature with zero library gaps — SSH works, hunk-level staging works, and Git Credential Manager handles GitHub OAuth automatically. Use `--porcelain` and machine-readable output formats for reliable parsing.
+**100% CLI git backend:** All git operations go through `git.exe` via CliWrap. This is the same approach as GitHub Desktop, GitKraken, and Sourcetree. It gives us every git feature with zero library gaps — SSH works, hunk-level staging works, and Git Credential Manager handles authentication automatically. Use `--porcelain` and machine-readable output formats for reliable parsing.
 
-**Git Credential Manager:** Ships with Git for Windows and intercepts credential requests for push/pull automatically. No OAuth browser flow or token management code needed in this app.
+**Git Credential Manager:** Ships with Git for Windows and intercepts credential requests for push/pull automatically. There is no authentication, token or credential code in this app at all — that is the point, and it is the position to defend.
+
+**No hosting-provider API:** This is a git client, not a GitHub client. Pull requests, issues and code review live in the browser, where they are better. The Octokit integration that once did this was removed in favour of the browser; see `Scans/2026-08-02-github-removal.html`.
 
 **Hunk-level staging:** Use `git add -p` piped via CliWrap, or construct a patch string from selected hunks in the UI and pipe to `git apply --cached` via stdin.
 
@@ -137,9 +139,9 @@ The security expert's verdict is blocking. The rest advise; you decide.
 `Scans/` is the audit trail, and it is **retained** — reports accumulate, they are never overwritten
 or tidied away. A scan is worth having precisely because you can compare it with the one before it.
 
-Write a report after any change that touches the outside world: a git.exe invocation, a GitHub API
-call, anything credential-adjacent, a file written or deleted, a path built from repository content,
-or a new package reference. In practice that means the `security-expert` seat produces one whenever
+Write a report after any change that touches the outside world: a git.exe invocation, any other
+process launch, anything credential-adjacent, a file written or deleted, a path built from
+repository content, or a new package reference. In practice that means the `security-expert` seat produces one whenever
 it is convened on such a change, and `network-audit` / `dangerous-code` output is folded into it
 rather than left in a terminal scrollback.
 
