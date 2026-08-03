@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: GarethRepton.GrumpyGit
+PackageVersion: __VERSION__
+PackageLocale: en-US
+
+Publisher: Gareth Repton
+PublisherUrl: https://github.com/garethrepton
+PublisherSupportUrl: https://github.com/garethrepton/GrumpyGit/issues
+
+PackageName: GrumpyGit
+PackageUrl: https://github.com/garethrepton/GrumpyGit
+Moniker: grumpygit
+
+License: Apache-2.0
+LicenseUrl: https://github.com/garethrepton/GrumpyGit/blob/master/LICENSE
+Copyright: Copyright (c) Gareth Repton
+
+ShortDescription: A diff-first Git client for Windows.
+Description: >-
+  A Git client for Windows built with .NET and Avalonia. It renders the full history
+  as an interactive commit graph, stages whole files, hunks or individual lines, and
+  pushes and pulls through Git Credential Manager. Its focus is reading a change:
+  split, single-column, blink and moved-block views over one parsed diff, with the
+  changed symbols listed above it. All git operations shell out to git.exe.
+
+Tags:
+  - git
+  - diff
+  - version-control
+  - source-control
+  - avalonia
+  - dotnet
+
+ReleaseNotesUrl: https://github.com/garethrepton/GrumpyGit/releases/tag/v__VERSION__
+
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

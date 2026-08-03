@@ -83,6 +83,77 @@ jobs:
           $size = [math]::Round((Get-ChildItem publish -Recurse | Measure-Object Length -Sum).Sum / 1MB, 1)
           Write-Host "publish/ contains $((Get-ChildItem publish -Recurse -File).Count) files, $size MB"
 
+      # Same self-contained output as the installer ships, just unzipped by hand.
+      # Everything sits under a single Grumpy\ root so unzipping into Downloads
+      # does not scatter a few hundred loose files, and so the winget portable
+      # manifest has a stable path to point its command alias at.
+      #
+      # ZipFile rather than Compress-Archive: the publish tree is several hundred
+      # files and Compress-Archive takes minutes over it.
+      - name: Build portable zip
+        id: portable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ steps.version.outputs.version }}'
+          New-Item -ItemType Directory -Force -Path dist, staging | Out-Null
+          Copy-Item publish -Destination staging/Grumpy -Recurse -Force
+
+          $zip = "dist/Grumpy-$version-win-x64-portable.zip"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory(
+            (Resolve-Path staging/Grumpy),
+            (Join-Path $PWD $zip),
+            [IO.Compression.CompressionLevel]::Optimal,
+            $true)
+
+          $sha = (Get-FileHash $zip -Algorithm SHA256).Hash
+          "sha256=$sha" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "{0} MB, SHA256 {1}" -f [math]::Round((Get-Item $zip).Length / 1MB, 1), $sha | Write-Host
+
+      # The manifest names Grumpy\Grumpy.exe. If the zip layout ever drifts from
+      # that, winget installs a shim pointing at nothing and the failure only
+      # shows up on a user's machine — so prove it here instead.
+      - name: Verify portable zip layout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Get-ChildItem dist/*-portable.zip | Select-Object -First 1
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, (Join-Path $PWD 'ziptest'))
+
+          $manifest = Get-Content installer/winget/GarethRepton.GrumpyGit.installer.yaml -Raw
+          if ($manifest -notmatch '(?m)^\s*-\s*RelativeFilePath:\s*(\S+)\s*$') {
+            throw 'Could not read RelativeFilePath from the winget installer manifest'
+          }
+          $relative = $Matches[1]
+
+          if (-not (Test-Path (Join-Path 'ziptest' $relative))) {
+            throw "Zip does not contain $relative — the winget manifest and the zip layout disagree"
+          }
+          Write-Host "OK: zip contains $relative"
+          Remove-Item ziptest -Recurse -Force
+
+      # Rendered, not hand-edited: version, download URL and hash have to agree
+      # with the zip built two steps up. Submitting these to microsoft/winget-pkgs
+      # is a deliberate manual step — this job publishes nothing but the release.
+      - name: Render winget manifests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path dist/winget | Out-Null
+          Get-ChildItem installer/winget/*.yaml | ForEach-Object {
+            ($_ | Get-Content -Raw).
+              Replace('__VERSION__', '${{ steps.version.outputs.version }}').
+              Replace('__SHA256__', '${{ steps.portable.outputs.sha256 }}').
+              Replace('__RELEASE_DATE__', (Get-Date -Format 'yyyy-MM-dd')) |
+              Set-Content (Join-Path 'dist/winget' $_.Name) -Encoding utf8 -NoNewline
+          }
+          if ((Get-ChildItem dist/winget/*.yaml | Select-String -Pattern '__\w+__')) {
+            throw 'A placeholder survived rendering'
+          }
+          Get-ChildItem dist/winget | ForEach-Object { Write-Host $_.Name }
+
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
 
@@ -182,9 +253,27 @@ jobs:
           path: dist/*.exe
           if-no-files-found: error
 
-      - name: Attach installer to release
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Grumpy-${{ steps.version.outputs.version }}-win-x64-portable
+          path: dist/*-portable.zip
+          if-no-files-found: error
+
+      # Separate from the release assets: these are the files to open a
+      # winget-pkgs PR with, not something a user downloads.
+      - name: Upload winget manifests artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winget-manifests-${{ steps.version.outputs.version }}
+          path: dist/winget/*.yaml
+          if-no-files-found: error
+
+      - name: Attach installer and portable zip to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/*-portable.zip
           generate_release_notes: true

@@ -2048,19 +2048,24 @@ public class GitService : IGitService
         }
         var todoContent = string.Join("\n", todoLines) + "\n";
 
-        // Write the todo list to a temp file
         var todoFile = Path.Combine(Path.GetTempPath(), $"grumpygit-rebase-todo-{Guid.NewGuid():N}.txt");
-        // Write a .cmd script that outputs the todo file content to the git-rebase-todo file
-        var scriptFile = Path.Combine(Path.GetTempPath(), $"grumpygit-rebase-editor-{Guid.NewGuid():N}.cmd");
 
         try
         {
             await File.WriteAllTextAsync(todoFile, todoContent, ct);
 
-            // The script receives the todo file path as %1. We overwrite it with our content.
-            // Using 'copy /Y' to replace the rebase-todo file that git passes as %1.
-            var scriptContent = $"@copy /Y \"{todoFile}\" %1 >nul\r\n";
-            await File.WriteAllTextAsync(scriptFile, scriptContent, ct);
+            // Git runs GIT_SEQUENCE_EDITOR through sh and appends the todo path as an
+            // argument, so the whole editor is one copy command overwriting git's todo
+            // with ours.
+            //
+            // It used to generate a .cmd doing `copy /Y "<todo>" %1`, which never worked:
+            // sh cannot execute a .cmd, so it read the file as a shell script, choked on
+            // `@copy`, and git aborted the rebase with "there was a problem with the
+            // editor". Quoting %1 does not help — nothing in that path is cmd.
+            //
+            // Forward slashes and the quotes both matter: sh treats backslashes as escapes,
+            // and the temp path contains a space whenever the account name does.
+            var editor = $"cp \"{todoFile.Replace('\\', '/')}\"";
 
             var result = await GitCmd()
                 .WithArguments(args => args
@@ -2068,7 +2073,7 @@ public class GitService : IGitService
                     .Add("-i")
                     .Add(ontoCommit))
                 .WithEnvironmentVariables(env => env
-                    .Set("GIT_SEQUENCE_EDITOR", scriptFile))
+                    .Set("GIT_SEQUENCE_EDITOR", editor))
                 .WithWorkingDirectory(repoPath)
                 .WithValidation(CommandResultValidation.None)
                 .ExecuteBufferedAsync(ct);
@@ -2084,7 +2089,6 @@ public class GitService : IGitService
         finally
         {
             try { File.Delete(todoFile); } catch { }
-            try { File.Delete(scriptFile); } catch { }
         }
     }
 

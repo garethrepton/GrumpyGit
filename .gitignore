@@ -11,6 +11,13 @@
 out/
 publish/
 
+# Release packaging output (installer, portable zip, rendered winget manifests)
+dist/
+staging/
+
+# Scan reports stay local
+Scans/
+
 # MSBuild binary logs
 *.binlog
 

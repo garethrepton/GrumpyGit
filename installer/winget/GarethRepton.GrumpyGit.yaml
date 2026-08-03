@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+#
+# Template. The release workflow substitutes __VERSION__ / __SHA256__ /
+# __RELEASE_DATE__ and writes the rendered manifests to dist/winget/.
+PackageIdentifier: GarethRepton.GrumpyGit
+PackageVersion: __VERSION__
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

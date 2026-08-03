@@ -13,9 +13,15 @@ A diff-first Git client for Windows, built with .NET 9 and Avalonia. The commit 
 
 ## Download
 
-**[⬇ Download the latest installer](https://github.com/garethrepton/GrumpyGit/releases/latest)** — `Grumpy-<version>-win-x64-setup.exe`
+**[⬇ Download the latest release](https://github.com/garethrepton/GrumpyGit/releases/latest)**
 
-Installs per-user under `%LOCALAPPDATA%\Programs\Grumpy`, so it needs no administrator rights and raises no UAC prompt. The build is self-contained — no .NET runtime install required. Uninstall from **Apps & features** like any other app.
+| | |
+|---|---|
+| **Installer** | `Grumpy-<version>-win-x64-setup.exe` — installs per-user under `%LOCALAPPDATA%\Programs\Grumpy`, so it needs no administrator rights and raises no UAC prompt. Uninstall from **Apps & features** like any other app. |
+| **Portable** | `Grumpy-<version>-win-x64-portable.zip` — unzip and run `Grumpy\Grumpy.exe`. No installer, no registry entry. Settings and review notes still live in `%LOCALAPPDATA%\Grumpy`. |
+| **winget** | `winget install GarethRepton.GrumpyGit` — the portable zip, with `grumpy` put on `PATH`. |
+
+Every build is self-contained, so no .NET runtime install is required.
 
 ## Reading a change
 
