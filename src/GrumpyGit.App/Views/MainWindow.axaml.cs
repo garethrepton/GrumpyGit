@@ -183,9 +183,15 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // Ctrl+Shift+R used to open AI review. Withdrawn with the rest of that
-            // feature's entry points — a shortcut that still opens a panel nothing
-            // advertises is worse than no shortcut, because it fires by accident.
+            // Ctrl+Shift+R — pull request preview. Inherited from the withdrawn AI
+            // review panel, which is fine: it is the review shortcut, and only one
+            // review surface is reachable.
+            if (e.Key == Key.R && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
+            {
+                vm.TogglePullRequestCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
 
             // Ctrl+Tab / Ctrl+Shift+Tab — walk the repository tree. This steps through
             // worktrees as well as repository roots, because a worktree is somewhere you
@@ -264,6 +270,12 @@ public partial class MainWindow : Window
                 if (shortcutsOverlay?.IsVisible == true)
                 {
                     shortcutsOverlay.IsVisible = false;
+                    e.Handled = true;
+                    return;
+                }
+                if (vm.IsPullRequestVisible)
+                {
+                    vm.ClosePullRequestCommand.Execute(null);
                     e.Handled = true;
                     return;
                 }

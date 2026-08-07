@@ -1,0 +1,317 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:GrumpyGit.App.Controls"
+             xmlns:sys="using:System"
+             xmlns:vm="using:GrumpyGit.App.ViewModels"
+             mc:Ignorable="d"
+             x:Class="GrumpyGit.App.Controls.PullRequestPanel"
+             x:DataType="vm:MainWindowViewModel">
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         Pull request preview — the review you do before raising anything.
+
+         Left  — what the merge would introduce: its commits, then its files,
+                 conflicts and highest-risk first.
+         Right — the diff, in the same panel, because a review that sends you
+                 somewhere else to read the code is not a review surface.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <Border Classes="panel">
+        <Grid RowDefinitions="Auto,Auto,*">
+
+            <!-- ── Title bar: what is being compared, and the way out ────────── -->
+            <Border Grid.Row="0" Classes="pane-header">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                        <Path Classes="icon sm" Data="{StaticResource IconPullRequest}"/>
+                        <TextBlock Text="PULL REQUEST PREVIEW" Classes="panel-header" Margin="0"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                HorizontalAlignment="Left">
+                        <ComboBox ItemsSource="{Binding Branches}"
+                                  SelectedItem="{Binding PrSourceBranch, Mode=TwoWay}"
+                                  MinWidth="180"
+                                  ToolTip.Tip="The branch being reviewed"
+                                  VerticalAlignment="Center"/>
+                        <TextBlock Text="→" Classes="caption" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding PrTargetBranches}"
+                                  SelectedItem="{Binding PrTargetBranch, Mode=TwoWay}"
+                                  MinWidth="180"
+                                  ToolTip.Tip="The branch it would merge into"
+                                  VerticalAlignment="Center"/>
+                        <Button Classes="sm"
+                                Content="Preview"
+                                Command="{Binding LoadPullRequestPreviewCommand}"
+                                ToolTip.Tip="Compare these two branches"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                        <Button Classes="sm"
+                                Name="CopySummaryButton"
+                                Content="Copy summary"
+                                IsEnabled="{Binding HasPrPreview}"
+                                ToolTip.Tip="Markdown review summary, for pasting into the pull request"/>
+                        <Button Classes="icon-only"
+                                Command="{Binding ClosePullRequestCommand}"
+                                ToolTip.Tip="Close">
+                            <Path Classes="icon" Data="{StaticResource IconClose}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ── Summary strip: the whole verdict in one line ──────────────── -->
+            <Border Grid.Row="1" Classes="chrome" Padding="12,8">
+                <StackPanel Orientation="Horizontal" Spacing="14">
+                    <TextBlock Text="{Binding PrHeaderLabel}" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding PrCommitCountLabel}" Classes="caption" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding PrFileCountLabel}" Classes="caption" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding PrChurnLabel}" Classes="caption mono" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding PrProgressLabel}" Classes="caption" VerticalAlignment="Center"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="6"
+                                IsVisible="{Binding HasPrPreview}">
+                        <TextBlock Text="base" Classes="caption" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding PrMergeBaseLabel}" Classes="caption mono" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- The merge verdict is the one thing here that changes what you do
+                         next, so it is the only coloured element in the strip. Three
+                         separate badges rather than one recoloured: "unavailable" must
+                         never be able to render in the same green as "clean". -->
+                    <Border Classes="badge success" IsVisible="{Binding PrMergesCleanly}">
+                        <TextBlock Text="{Binding PrMergeLabel}"/>
+                    </Border>
+                    <Border Classes="badge danger" IsVisible="{Binding PrHasConflicts}">
+                        <TextBlock Text="{Binding PrMergeLabel}"/>
+                    </Border>
+                    <Border Classes="badge warn" IsVisible="{Binding PrMergeUnknown}">
+                        <TextBlock Text="{Binding PrMergeLabel}"/>
+                    </Border>
+
+                    <ProgressBar IsIndeterminate="True"
+                                 Width="90" Height="3"
+                                 VerticalAlignment="Center"
+                                 IsVisible="{Binding IsLoadingPullRequest}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ── Body ─────────────────────────────────────────────────────── -->
+            <Grid Grid.Row="2" ColumnDefinitions="400,Auto,*">
+
+                <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,*">
+
+                    <!-- Error / empty state, above everything it explains -->
+                    <Border Grid.Row="0"
+                            Classes="chrome"
+                            Padding="12,10"
+                            IsVisible="{Binding HasPrError}">
+                        <TextBlock Text="{Binding PrError}"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource DangerFgBrush}"/>
+                    </Border>
+
+                    <!-- Conflicting paths, listed rather than merely counted: the count
+                         tells you to worry, the list tells you where. -->
+                    <Border Grid.Row="1"
+                            Classes="chrome"
+                            Padding="12,10"
+                            IsVisible="{Binding PrHasConflicts}">
+                        <StackPanel Spacing="6">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <Path Classes="icon sm" Data="{StaticResource IconAlert}"
+                                      Stroke="{DynamicResource DangerFgBrush}"/>
+                                <TextBlock Text="WOULD NOT MERGE CLEANLY" Classes="panel-header" Margin="0"/>
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding PrConflictPaths}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="sys:String">
+                                        <TextBlock Text="{Binding}" Classes="caption mono" TextWrapping="Wrap"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Commits -->
+                    <Border Grid.Row="2" Classes="pane-header">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="COMMITS" Classes="panel-header" Margin="0"/>
+                                <Border Classes="badge">
+                                    <TextBlock Text="{Binding PrCommits.Count}"/>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="3" RowDefinitions="Auto,Auto,*">
+
+                        <ScrollViewer Grid.Row="0" MaxHeight="180">
+                            <ItemsControl ItemsSource="{Binding PrCommits}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:CommitRowViewModel">
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="12,4">
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding ShortHash}"
+                                                       Classes="caption mono"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Subject}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <!-- Files -->
+                        <Border Grid.Row="1" Classes="pane-header">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="FILES" Classes="panel-header" Margin="0"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <Button Classes="sm" Content="Next"
+                                            ToolTip.Tip="Jump to the next file you haven't ticked off"
+                                            Command="{Binding NextUnreviewedPrFileCommand}"/>
+                                    <Button Classes="sm" Content="Mark all"
+                                            Command="{Binding MarkPullRequestReviewedCommand}"/>
+                                    <Button Classes="sm subtle" Content="Reset"
+                                            Command="{Binding ResetPullRequestReviewCommand}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="2">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding PrFiles}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ReviewFileViewModel">
+                                            <Border Padding="10,7" Background="Transparent">
+                                                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="10">
+
+                                                    <CheckBox Grid.Column="0"
+                                                              IsChecked="{Binding IsReviewed}"
+                                                              ToolTip.Tip="Mark this file reviewed"
+                                                              VerticalAlignment="Center"/>
+
+                                                    <Border Grid.Column="1"
+                                                            Width="6" Height="6"
+                                                            CornerRadius="{DynamicResource RadiusPill}"
+                                                            VerticalAlignment="Center"
+                                                            Background="{Binding RiskBrush}"
+                                                            ToolTip.Tip="{Binding RiskReason}"/>
+
+                                                    <Button Grid.Column="2"
+                                                            Classes="subtle"
+                                                            HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Left"
+                                                            Padding="4,2"
+                                                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ShowPrFileDiffCommand}"
+                                                            CommandParameter="{Binding}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <TextBlock Text="{Binding FileName}"/>
+                                                            <TextBlock Text="{Binding Directory}" Classes="caption"/>
+                                                            <Border Classes="badge danger"
+                                                                    IsVisible="{Binding WouldConflict}"
+                                                                    ToolTip.Tip="This file conflicts with the target branch">
+                                                                <TextBlock Text="conflict"/>
+                                                            </Border>
+                                                            <Path Classes="icon sm"
+                                                                  Data="{StaticResource IconFlag}"
+                                                                  IsVisible="{Binding HasNote}"
+                                                                  ToolTip.Tip="You have a note on this file"/>
+                                                        </StackPanel>
+                                                    </Button>
+
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="{Binding ChurnLabel}"
+                                                               Classes="caption mono"
+                                                               VerticalAlignment="Center"/>
+
+                                                    <TextBlock Grid.Column="4"
+                                                               Text="{Binding ChangeTypeGlyph}"
+                                                               Classes="caption mono"
+                                                               VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <StackPanel Classes="empty-state" IsVisible="{Binding !HasPrPreview}">
+                                    <Path Classes="icon lg" Data="{StaticResource IconPullRequest}"/>
+                                    <TextBlock Classes="empty-title" Text="No preview yet"/>
+                                    <TextBlock Classes="empty-body"
+                                               Text="Pick a source and a target branch, then Preview. Nothing is pushed and nothing is checked out — the comparison is entirely local."/>
+                                </StackPanel>
+
+                                <!-- An empty file list after a successful preview reads as a
+                                     failure to load unless it says otherwise. -->
+                                <StackPanel Classes="empty-state" IsVisible="{Binding PrIsUpToDate}">
+                                    <Path Classes="icon lg" Data="{StaticResource IconCheckCircle}"/>
+                                    <TextBlock Classes="empty-title" Text="Nothing to review"/>
+                                    <TextBlock Classes="empty-body"
+                                               Text="This branch has nothing the target does not already have."/>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+
+                <GridSplitter Grid.Column="1" Classes="hairline"/>
+
+                <!-- ── The diff, in the same panel ───────────────────────────── -->
+                <Grid Grid.Column="2" RowDefinitions="Auto,*">
+
+                    <Border Grid.Row="0" Classes="pane-header">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding DiffFilePath}"
+                                       Classes="mono"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"/>
+                            <Button Grid.Column="1"
+                                    Classes="sm subtle"
+                                    Content="Notes"
+                                    Command="{Binding ToggleNotesPanelCommand}"
+                                    ToolTip.Tip="Write a note against this file"/>
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1" RowDefinitions="*,Auto">
+                        <controls:DiffViewer Grid.Row="0"
+                                             Diff="{Binding CurrentDiff}"
+                                             FilePath="{Binding DiffFilePath}"
+                                             IsWorkingTree="False"
+                                             CanStage="False"
+                                             CollapseUnchanged="{Binding ShouldCollapseUnchanged}"
+                                             ViewMode="{Binding DiffViewMode}"
+                                             HighlightMoved="{Binding HighlightMovedBlocks}"/>
+
+                        <!-- Notes sit under the diff rather than beside it: a finding is
+                             written about the lines you are looking at, and moving the
+                             diff sideways to make room costs the reader more than the
+                             note gains. -->
+                        <Border Grid.Row="1"
+                                Classes="chrome"
+                                Padding="10"
+                                IsVisible="{Binding IsNotesPanelVisible}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="REVIEW NOTE" Classes="panel-header" Margin="0"/>
+                                <TextBox Text="{Binding CurrentNote, Mode=TwoWay}"
+                                         AcceptsReturn="True"
+                                         Height="110"
+                                         Watermark="What would you say about this file in review?"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

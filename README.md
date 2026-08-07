@@ -42,6 +42,7 @@ Supporting the above:
 
 ## The rest of the client
 
+- **Pull request preview** (**Ctrl+Shift+R**) — review your branch against the one it will merge into, before raising anything. Shows the commits the merge would introduce, the net diff file by file, and whether it would actually conflict — a real merge simulated in memory, without switching branches or touching your working tree. Tick files off, write notes against them, then copy the whole review out as markdown. Entirely local: no hosting provider is contacted, and nothing is pushed.
 - **Commit graph** — the full branching history as an interactive DAG
 - **Unpushed at a glance** — commits that exist on no remote are badged in the graph and counted in the status bar, so you can see what a push would publish
 - **Working tree** — stage and unstage whole files, individual hunks or individual lines, then commit

@@ -21,6 +21,7 @@
     <StreamGeometry x:Key="IconBranch">M3 6a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M15 18a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M6 9v12 M18 15V9a6 6 0 0 0-6-6H9</StreamGeometry>
     <StreamGeometry x:Key="IconCommit">M9 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M3 12h6 M15 12h6</StreamGeometry>
     <StreamGeometry x:Key="IconMerge">M15 18a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M3 6a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M6 21V9a9 9 0 0 0 9 9</StreamGeometry>
+    <StreamGeometry x:Key="IconPullRequest">M3 6a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M15 18a3 3 0 1 0 6 0 3 3 0 1 0-6 0 M6 9v12 M13 6h3a2 2 0 0 1 2 2v7</StreamGeometry>
     <StreamGeometry x:Key="IconTag">M12.59 2.59A2 2 0 0 0 11.17 2H4a2 2 0 0 0-2 2v7.17a2 2 0 0 0 .59 1.42l8.7 8.7a2.43 2.43 0 0 0 3.42 0l6.58-6.58a2.43 2.43 0 0 0 0-3.42z M7 7h.01</StreamGeometry>
     <StreamGeometry x:Key="IconArchive">M3 3h18v5H3z M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8 M10 12h4</StreamGeometry>
 

@@ -242,6 +242,28 @@ public interface IGitService
     /// <summary>Drops administrative entries for worktrees whose directories are gone.</summary>
     Task PruneWorktreesAsync(string repoPath, CancellationToken ct = default);
 
+    // ── Pull request preview ─────────────────────────────────────────────────
+    //
+    // Read-only with respect to the checkout: nothing here switches a branch, stages
+    // anything, or writes to the working tree.
+
+    /// <summary>Full hash at the tip of a branch.</summary>
+    Task<string> GetBranchHeadAsync(string repoPath, string branch, CancellationToken ct = default);
+
+    /// <summary>
+    /// Common ancestor of two branches, or an empty string when they share no history.
+    /// </summary>
+    Task<string> GetMergeBaseAsync(string repoPath, string branchA, string branchB, CancellationToken ct = default);
+
+    /// <summary>Commits reachable from <paramref name="toHash"/> but not <paramref name="fromHash"/>, newest first.</summary>
+    Task<IReadOnlyList<CommitNode>> GetCommitsInRangeAsync(string repoPath, string fromHash, string toHash, CancellationToken ct = default);
+
+    /// <summary>
+    /// What merging <paramref name="sourceBranch"/> into <paramref name="targetBranch"/>
+    /// would do, computed in memory without a checkout.
+    /// </summary>
+    Task<MergePreview> PreviewMergeAsync(string repoPath, string targetBranch, string sourceBranch, CancellationToken ct = default);
+
     // NOTE: RunCommandAsync was deliberately removed from this interface — it was an
     // unvalidated git argument passthrough. See the note at the end of GitService.cs.
 }

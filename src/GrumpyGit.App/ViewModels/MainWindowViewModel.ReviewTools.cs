@@ -182,6 +182,7 @@ public partial class MainWindowViewModel
         foreach (var f in ChangedFiles) f.HasNote = noted.Contains(f.Path);
         foreach (var f in StagedFiles) f.HasNote = noted.Contains(f.Path);
         foreach (var f in ConflictedFiles) f.HasNote = noted.Contains(f.Path);
+        foreach (var f in PrFiles) f.HasNote = noted.Contains(f.FilePath);
     }
 
     /// <summary>Initialises the notes store for a repository.</summary>

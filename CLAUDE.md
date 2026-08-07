@@ -12,6 +12,8 @@ A .NET desktop application providing a visual git client. The goal is a first-cl
 - Stage whole files or individual hunks and commit
 - Push / pull to/from a remote (via Git Credential Manager — no custom auth UI needed)
 - Compare the full codebase between any two commits (spanning all commits in between)
+- Preview a pull request locally: diff a branch against its merge base with the target, simulate the
+  merge to find conflicts, review file by file, and copy the review out as markdown
 
 ---
 

@@ -20,6 +20,15 @@ public partial class ReviewFileViewModel : ObservableObject
 
     [ObservableProperty] private bool _isReviewed;
 
+    /// <summary>True when the reviewer has written a note against this file.</summary>
+    [ObservableProperty] private bool _hasNote;
+
+    /// <summary>
+    /// Set in a pull request preview when the simulated merge names this file. A file
+    /// that will not merge is worth looking at before one that merely changed a lot.
+    /// </summary>
+    public bool WouldConflict { get; init; }
+
     public string FileName
     {
         get

@@ -93,28 +93,33 @@ public class GitService : IGitService
     // Commit graph
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Fields separated by NUL (%x00), records terminated by RS (%x1E).
+    /// Using RS as a record terminator (not separator) means trailing
+    /// whitespace / newlines don't pollute the last field.
+    ///
+    /// Co-authored-by trailers are pulled out explicitly (US, %x1F, between multiple
+    /// values) because they are how AI coding agents attribute themselves — the human
+    /// stays the author, the agent is added as co-author. Subject stays last so a
+    /// subject containing a delimiter can be rejoined without corrupting other fields.
+    ///
+    /// Shared by every command whose output <see cref="ParseCommitGraph"/> reads; the two
+    /// must change together.
+    /// </summary>
+    private const string CommitGraphFormat =
+        "%H%x00%P%x00%an%x00%ae%x00%ai%x00%D%x00%cn%x00%ce%x00" +
+        "%(trailers:key=Co-authored-by,valueonly,separator=%x1F)%x00%s%x1E";
+
     public async Task<IReadOnlyList<CommitNode>> GetCommitGraphAsync(
         string repoPath, CancellationToken ct = default)
     {
         ValidateRepoPath(repoPath);
 
-        // Fields separated by NUL (%x00), records terminated by RS (%x1E).
-        // Using RS as a record terminator (not separator) means trailing
-        // whitespace / newlines don't pollute the last field.
-        //
-        // Co-authored-by trailers are pulled out explicitly (US, %x1F, between multiple
-        // values) because they are how AI coding agents attribute themselves — the human
-        // stays the author, the agent is added as co-author. Subject stays last so a
-        // subject containing a delimiter can be rejoined without corrupting other fields.
-        const string format =
-            "%H%x00%P%x00%an%x00%ae%x00%ai%x00%D%x00%cn%x00%ce%x00" +
-            "%(trailers:key=Co-authored-by,valueonly,separator=%x1F)%x00%s%x1E";
-
         var result = await GitCmd()
             .WithArguments(args => args
                 .Add("log")
                 .Add("--all")
-                .Add($"--format={format}")
+                .Add($"--format={CommitGraphFormat}")
                 .Add("--topo-order"))
             .WithWorkingDirectory(repoPath)
             .WithValidation(CommandResultValidation.None)
@@ -2420,6 +2425,127 @@ public class GitService : IGitService
         throw new InvalidOperationException(
             $"This worktree is bound to its branch and cannot switch to '{attemptedBranch}'. " +
             "Create a worktree for that branch instead, or use the repository's main working directory.");
+    }
+
+    // -------------------------------------------------------------------------
+    // Pull request preview
+    //
+    // Everything here is read-only with respect to the checkout: no branch is switched,
+    // no index is touched, and the working tree is never written. That is the whole
+    // point — reviewing your own branch against a target must not disturb what you are
+    // in the middle of.
+    // -------------------------------------------------------------------------
+
+    public async Task<string> GetBranchHeadAsync(
+        string repoPath, string branch, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateBranch(branch);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("rev-parse")
+                .Add("--verify")
+                // --end-of-options stops git reading a later argument as a flag, which is
+                // the remaining way a ref name could act as one after ValidateBranch.
+                .Add("--end-of-options")
+                .Add(branch))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException($"git rev-parse failed for '{branch}'", result.ExitCode, result.StandardError);
+
+        return result.StandardOutput.Trim();
+    }
+
+    /// <summary>
+    /// Common ancestor of two branches, or an empty string when they share no history.
+    /// </summary>
+    public async Task<string> GetMergeBaseAsync(
+        string repoPath, string branchA, string branchB, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateBranch(branchA);
+        ValidateBranch(branchB);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("merge-base")
+                .Add("--end-of-options")
+                .Add(branchA)
+                .Add(branchB))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        // Exit 1 means "no common ancestor" — unrelated histories, which the caller
+        // reports rather than treats as a failure.
+        if (result.ExitCode == 1)
+            return string.Empty;
+
+        if (result.ExitCode != 0)
+            throw new GitException("git merge-base failed", result.ExitCode, result.StandardError);
+
+        return result.StandardOutput.Trim();
+    }
+
+    /// <summary>Commits reachable from <paramref name="toHash"/> but not <paramref name="fromHash"/>, newest first.</summary>
+    public async Task<IReadOnlyList<CommitNode>> GetCommitsInRangeAsync(
+        string repoPath, string fromHash, string toHash, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateHash(fromHash, nameof(fromHash));
+        ValidateHash(toHash, nameof(toHash));
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("log")
+                .Add($"--format={CommitGraphFormat}")
+                // Both sides are validated hex, so the range is built from values that
+                // cannot carry a flag or a shell metacharacter.
+                .Add($"{fromHash}..{toHash}"))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git log (range) failed", result.ExitCode, result.StandardError);
+
+        return ParseCommitGraph(result.StandardOutput);
+    }
+
+    /// <summary>
+    /// Merges <paramref name="sourceBranch"/> into <paramref name="targetBranch"/> in
+    /// memory and reports what would conflict.
+    ///
+    /// <c>--write-tree</c> does add the merged result to the object database — unreachable
+    /// objects that git's own gc collects — but it is the only way to get a real merge
+    /// verdict without a checkout. The alternative, actually merging and rolling back,
+    /// would trample the user's working tree to answer a question.
+    /// </summary>
+    public async Task<MergePreview> PreviewMergeAsync(
+        string repoPath, string targetBranch, string sourceBranch, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateBranch(targetBranch);
+        ValidateBranch(sourceBranch);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("merge-tree")
+                .Add("--write-tree")
+                .Add("--name-only")
+                .Add("-z")
+                .Add("--end-of-options")
+                .Add(targetBranch)
+                .Add(sourceBranch))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        return MergeTreeParser.Parse(result.StandardOutput, result.ExitCode);
     }
 
     // -------------------------------------------------------------------------

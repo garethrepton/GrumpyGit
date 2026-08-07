@@ -510,6 +510,7 @@ public partial class MainWindowViewModel : ViewModelBase
         DiffFilePath = null;
         SelectedCommit = null;
         SelectedFile = null;
+        ResetPullRequestForRepo();
         StatusMessage = "Loading repository…";
 
         try

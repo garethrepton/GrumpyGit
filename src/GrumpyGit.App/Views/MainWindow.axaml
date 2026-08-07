@@ -219,11 +219,18 @@
                             VerticalAlignment="Center">
 
                     <!-- The AI review entry point lived here. Withdrawn while its
-                         direction is decided: the toolbar button, the Ctrl+Shift+R
-                         shortcut, the status-bar session count and the overlay are all
-                         gone. AiReviewPanel, MainWindowViewModel.AiReview.cs and the
-                         review-state storage are untouched, so restoring it is a matter
-                         of putting these entry points back, not rebuilding the feature. -->
+                         direction is decided: the toolbar button, the status-bar session
+                         count and the overlay are all gone. AiReviewPanel,
+                         MainWindowViewModel.AiReview.cs and the review-state storage are
+                         untouched, so restoring it is a matter of putting these entry
+                         points back, not rebuilding the feature. Ctrl+Shift+R now opens
+                         the pull request preview. -->
+
+                    <Button Classes="icon-only"
+                            Command="{Binding TogglePullRequestCommand}"
+                            ToolTip.Tip="Review this branch against another (Ctrl+Shift+R)">
+                        <Path Classes="icon" Data="{DynamicResource IconPullRequest}"/>
+                    </Button>
 
                     <Button Classes="icon-only"
                             Command="{Binding ToggleGraphCommand}"
@@ -2105,6 +2112,18 @@
 
         <!-- The AI session review overlay was hosted here. Removed with the rest of the
              feature's surface; AiReviewPanel itself still exists and can be re-hosted. -->
+
+        <!-- ── Pull request preview overlay (Ctrl+Shift+R) ──────────────────
+             Full-bleed rather than a centred card: it carries its own diff pane,
+             so it is a workspace for the duration of a review, not a dialog. -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="135"
+                Classes="scrim"
+                IsVisible="{Binding IsPullRequestVisible}">
+            <controls:PullRequestPanel HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       Margin="24"/>
+        </Border>
 
         <!-- ── Repository quick switcher (Ctrl+P) ────────────────────────── -->
         <controls:RepoQuickSwitcher Grid.Row="0" Grid.RowSpan="6"
