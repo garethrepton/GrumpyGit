@@ -326,6 +326,12 @@ public partial class MainWindow : Window
                 vm.PullCommand.Execute(null);
                 e.Handled = true;
             }
+            // Ctrl+Shift+F — fetch
+            else if (e.Key == Key.F && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
+            {
+                vm.FetchCommand.Execute(null);
+                e.Handled = true;
+            }
             // Ctrl+Shift+B — new branch
             else if (e.Key == Key.B && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
             {

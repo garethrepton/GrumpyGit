@@ -280,7 +280,7 @@
                                 ToolTip.Tip="Create a new branch">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Path Classes="icon sm" Data="{DynamicResource IconBranch}"/>
-                                <TextBlock Text="New" VerticalAlignment="Center"/>
+                                <TextBlock Text="New Branch" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
                         <Button Classes="sm"
@@ -291,10 +291,38 @@
                                 <TextBlock Text="Merge" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
+
+                        <!-- The rest of the branch verbs. Rare enough that a fourth
+                             toolbar button would cost more attention than it returns,
+                             common enough that they cannot live only in a context menu. -->
+                        <Button Classes="sm icon-only"
+                                ToolTip.Tip="More branch and remote actions">
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuItem Header="Rename current branch…"
+                                              Command="{Binding StartRenameBranchCommand}"/>
+                                    <MenuItem Header="Delete a branch…"
+                                              Command="{Binding StartDeleteBranchCommand}"/>
+                                    <Separator/>
+                                    <MenuItem Header="Check out a remote branch…"
+                                              Command="{Binding StartCheckoutRemoteBranchCommand}"/>
+                                    <MenuItem Header="Manage remotes…"
+                                              Command="{Binding StartManageRemotesCommand}"/>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                            <Path Classes="icon sm" Data="{DynamicResource IconChevronDown}"/>
+                        </Button>
                     </StackPanel>
 
                     <!-- Sync — the focal group. Push is the single accent. -->
                     <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Command="{Binding FetchCommand}"
+                                ToolTip.Tip="Fetch from remote — updates remote branches without touching your files (Ctrl+Shift+F)">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <Path Classes="icon" Data="{DynamicResource IconFetch}"/>
+                                <TextBlock Text="Fetch" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
                         <Button Command="{Binding PullCommand}"
                                 ToolTip.Tip="Pull from remote">
                             <StackPanel Orientation="Horizontal" Spacing="7">
@@ -429,6 +457,148 @@
                             Command="{Binding CancelCreateTagCommand}"/>
                 </StackPanel>
 
+                <!-- Rename-branch sub-panel — always the current branch, which is the
+                     only one whose name is on screen to be wrong. -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            IsVisible="{Binding IsRenamingBranch}">
+                    <Path Classes="icon" Data="{DynamicResource IconBranch}"/>
+                    <TextBlock Text="{Binding CurrentBranch, StringFormat='Rename {0} to'}"
+                               Classes="secondary"
+                               VerticalAlignment="Center"/>
+                    <TextBox Classes="branch-input"
+                             Text="{Binding RenameBranchNewName, Mode=TwoWay}"
+                             Watermark="new-name"
+                             Width="240"/>
+                    <Button Classes="primary"
+                            Content="Rename"
+                            Command="{Binding ConfirmRenameBranchCommand}"/>
+                    <Button Classes="subtle"
+                            Content="Cancel"
+                            Command="{Binding CancelRenameBranchCommand}"/>
+                </StackPanel>
+
+                <!-- Delete-branch sub-panel. The current branch is absent from the list
+                     because git will not delete the branch you are standing on. -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            IsVisible="{Binding IsDeletingBranch}">
+                    <Path Classes="icon" Data="{DynamicResource IconTrash}"/>
+                    <TextBlock Text="Delete local branch"
+                               Classes="secondary"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Classes="branch-combo"
+                              ItemsSource="{Binding MergeBranches}"
+                              SelectedItem="{Binding BranchToDelete, Mode=TwoWay}"
+                              Width="240"/>
+                    <Button Classes="primary"
+                            Content="Delete"
+                            Command="{Binding ConfirmDeleteBranchCommand}"/>
+                    <Button Classes="subtle"
+                            Content="Cancel"
+                            Command="{Binding CancelDeleteBranchCommand}"/>
+                </StackPanel>
+
+                <!-- Remote-branch checkout sub-panel -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            IsVisible="{Binding IsCheckingOutRemoteBranch}">
+                    <Path Classes="icon" Data="{DynamicResource IconFetch}"/>
+                    <TextBlock Text="Check out remote branch"
+                               Classes="secondary"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Classes="branch-combo"
+                              ItemsSource="{Binding RemoteBranches}"
+                              SelectedItem="{Binding SelectedRemoteBranch, Mode=TwoWay}"
+                              Width="280"/>
+                    <Button Classes="primary"
+                            Content="Check Out"
+                            Command="{Binding ConfirmCheckoutRemoteBranchCommand}"/>
+                    <Button Classes="subtle"
+                            Content="Cancel"
+                            Command="{Binding CancelCheckoutRemoteBranchCommand}"/>
+                    <TextBlock Text="Nothing here yet — fetch first."
+                               Classes="tertiary"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding !HasRemoteBranches}"/>
+                </StackPanel>
+
+                <!-- Remotes sub-panel. One Save covers add, rename and re-point: picking
+                     a remote fills the boxes, editing the name renames it, leaving the
+                     picker empty adds a new one. -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            IsVisible="{Binding IsManagingRemotes}">
+                    <Path Classes="icon" Data="{DynamicResource IconFetch}"/>
+                    <TextBlock Text="Remotes"
+                               Classes="secondary"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Classes="branch-combo"
+                              ItemsSource="{Binding Remotes}"
+                              SelectedItem="{Binding SelectedRemote, Mode=TwoWay}"
+                              Width="140">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <TextBlock Text="{Binding Name}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBox Classes="branch-input"
+                             Text="{Binding RemoteNameInput, Mode=TwoWay}"
+                             Watermark="origin"
+                             Width="120"/>
+                    <TextBox Classes="branch-input"
+                             Text="{Binding RemoteUrlInput, Mode=TwoWay}"
+                             Watermark="https://host/team/repo.git"
+                             Width="360"/>
+                    <Button Classes="primary"
+                            Content="Save"
+                            Command="{Binding SaveRemoteCommand}"/>
+                    <Button Classes="sm"
+                            Content="Remove"
+                            Command="{Binding DeleteRemoteCommand}"
+                            IsEnabled="{Binding HasSelectedRemote}"/>
+                    <Button Classes="subtle"
+                            Content="Close"
+                            Command="{Binding CancelManageRemotesCommand}"/>
+                </StackPanel>
+
+                <!-- Clone sub-panel. Folder name is optional — git's own default is the
+                     last segment of the URL, and Core derives the same thing. -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            IsVisible="{Binding IsCloning}">
+                    <Path Classes="icon" Data="{DynamicResource IconPull}"/>
+                    <TextBlock Text="Clone"
+                               Classes="secondary"
+                               VerticalAlignment="Center"/>
+                    <TextBox Classes="branch-input"
+                             Text="{Binding CloneUrl, Mode=TwoWay}"
+                             Watermark="https://host/team/repo.git"
+                             Width="340"/>
+                    <Button Classes="sm"
+                            Content="Into…"
+                            Command="{Binding ChooseCloneDirectoryCommand}"
+                            ToolTip.Tip="Choose the folder to clone into"/>
+                    <TextBlock Text="{Binding CloneParentDirectory}"
+                               Classes="mono tertiary"
+                               MaxWidth="260"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
+                               ToolTip.Tip="{Binding CloneParentDirectory}"/>
+                    <TextBox Classes="branch-input"
+                             Text="{Binding CloneFolderName, Mode=TwoWay}"
+                             Watermark="folder name (optional)"
+                             Width="180"/>
+                    <Button Classes="primary"
+                            Content="Clone"
+                            Command="{Binding ConfirmCloneCommand}"
+                            IsEnabled="{Binding !IsCloneRunning}"/>
+                    <Button Classes="subtle"
+                            Content="Cancel"
+                            Command="{Binding CancelCloneCommand}"/>
+                </StackPanel>
+
             </StackPanel>
         </Border>
 
@@ -462,13 +632,25 @@
                                 ToolTip.Tip="New worktree for a branch">
                             <Path Classes="icon sm" Data="{DynamicResource IconBranch}"/>
                         </Button>
+                        <!-- All three ways of getting a repository into the tree hang off
+                             the one +: opening an existing one is the common case, but it
+                             was previously the only one the app could do at all. -->
                         <Button Grid.Column="2"
                                 Classes="subtle icon-only"
                                 Padding="3"
                                 Margin="0,0,6,0"
                                 VerticalAlignment="Center"
-                                Command="{Binding AddRepositoryCommand}"
-                                ToolTip.Tip="Add a repository">
+                                ToolTip.Tip="Add, create or clone a repository">
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuItem Header="Add existing repository…"
+                                              Command="{Binding AddRepositoryCommand}"/>
+                                    <MenuItem Header="New repository…"
+                                              Command="{Binding InitRepositoryCommand}"/>
+                                    <MenuItem Header="Clone…"
+                                              Command="{Binding StartCloneCommand}"/>
+                                </MenuFlyout>
+                            </Button.Flyout>
                             <Path Classes="icon sm" Data="{DynamicResource IconPlus}"/>
                         </Button>
                     </Grid>
@@ -501,6 +683,8 @@
                                           ToolTip.Tip="{Binding Path}">
                                         <Grid.ContextMenu>
                                             <ContextMenu>
+                                                <MenuItem Header="New branch…"
+                                                          Command="{Binding DataContext.StartCreateBranchCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
                                                 <MenuItem Header="New worktree…"
                                                           CommandParameter="{Binding}"
                                                           Command="{Binding DataContext.StartCreateWorktreeCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
@@ -961,6 +1145,22 @@
                                                               CommandParameter="{Binding Hash}"
                                                               Command="{Binding DataContext.RevertCommitCommand, ElementName=CommitListBox}"
                                                               IsVisible="{Binding !IsWorkingTree}"/>
+                                                    <MenuItem Header="Cherry-pick onto Current Branch…"
+                                                              CommandParameter="{Binding Hash}"
+                                                              Command="{Binding DataContext.CherryPickCommitCommand, ElementName=CommitListBox}"
+                                                              IsVisible="{Binding !IsWorkingTree}"/>
+                                                    <MenuItem Header="Reset Current Branch to Here"
+                                                              IsVisible="{Binding !IsWorkingTree}">
+                                                        <MenuItem Header="Soft — keep changes staged"
+                                                                  CommandParameter="{Binding Hash}"
+                                                                  Command="{Binding DataContext.ResetSoftCommand, ElementName=CommitListBox}"/>
+                                                        <MenuItem Header="Mixed — keep changes unstaged"
+                                                                  CommandParameter="{Binding Hash}"
+                                                                  Command="{Binding DataContext.ResetMixedCommand, ElementName=CommitListBox}"/>
+                                                        <MenuItem Header="Hard — discard everything after"
+                                                                  CommandParameter="{Binding Hash}"
+                                                                  Command="{Binding DataContext.ResetHardCommand, ElementName=CommitListBox}"/>
+                                                    </MenuItem>
                                                     <MenuItem Header="Compare from Here…"
                                                               CommandParameter="{Binding Hash}"
                                                               Command="{Binding DataContext.StartCompareCommand, ElementName=CommitListBox}"
@@ -1188,11 +1388,17 @@
                                          AcceptsReturn="False"/>
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Button Classes="primary"
-                                            Content="Commit"
+                                            Content="{Binding CommitButtonLabel}"
                                             Command="{Binding CommitCommand}"/>
                                     <Button Classes="sm"
                                             Content="Stage All"
                                             Command="{Binding StageAllCommand}"/>
+                                    <!-- Ticking this loads the last commit's message, so
+                                         the box shows what is about to be replaced. -->
+                                    <CheckBox Content="Amend"
+                                              IsChecked="{Binding IsAmending, Mode=TwoWay}"
+                                              VerticalAlignment="Center"
+                                              ToolTip.Tip="Replace the last commit with this message and whatever is staged. Do not amend a commit you have already pushed."/>
                                 </StackPanel>
                             </StackPanel>
 

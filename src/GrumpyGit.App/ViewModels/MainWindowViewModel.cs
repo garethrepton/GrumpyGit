@@ -551,6 +551,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
             OnPropertyChanged(nameof(MergeBranches));
 
+            // Kept out of the branch picker deliberately: that list is "branches I can
+            // switch to", and everything reading it — push, the PR panel — means local.
+            await LoadRemoteBranchesAsync();
+
             // Attribution must be computed before commit rows are built, since each
             // row reads its AI badge from the attribution map.
             RebuildAiSessions(commitsTask.Result);
@@ -619,7 +623,13 @@ public partial class MainWindowViewModel : ViewModelBase
             // something. Skipped in detached HEAD, where CurrentBranch is a
             // "(detached) <sha>" label rather than a ref that can be pushed.
             var branch = Branches.Contains(CurrentBranch) ? CurrentBranch : null;
-            await _git.PushAsync(RepoPath, "origin", branch);
+
+            // A branch created here has no upstream, and git refuses to push one without
+            // being told where it goes. Only ever set when there is none — passing it
+            // unconditionally would repoint a branch that deliberately tracks elsewhere.
+            var setUpstream = branch is not null && !await _git.HasUpstreamAsync(RepoPath, branch);
+
+            await _git.PushAsync(RepoPath, "origin", branch, setUpstream);
 
             // Reload so the graph, ref pills and unpushed badges reflect the new remote
             // state. Pull and Commit already do this; without it a successful push left
@@ -640,6 +650,13 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task CommitAsync()
     {
         if (string.IsNullOrEmpty(RepoPath) || string.IsNullOrWhiteSpace(CommitMessage)) return;
+
+        if (IsAmending)
+        {
+            await AmendCommitAsync();
+            return;
+        }
+
         StatusMessage = "Committing…";
         try
         {
@@ -763,8 +780,8 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void StartCreateBranch()
     {
+        CloseActionBars();
         NewBranchName = string.Empty;
-        IsMerging = false;
         IsCreatingBranch = true;
     }
 
@@ -805,13 +822,15 @@ public partial class MainWindowViewModel : ViewModelBase
     public IReadOnlyList<string> MergeBranches =>
         Branches.Where(b => b != CurrentBranch).ToList();
 
-    public bool IsBranchBarVisible => IsCreatingBranch || IsMerging || IsCreatingTag;
+    public bool IsBranchBarVisible =>
+        IsCreatingBranch || IsMerging || IsCreatingTag || IsRenamingBranch
+        || IsDeletingBranch || IsCheckingOutRemoteBranch || IsManagingRemotes || IsCloning;
 
     [RelayCommand]
     private void StartMerge()
     {
+        CloseActionBars();
         SelectedMergeBranch = null;
-        IsCreatingBranch = false;
         IsMerging = true;
     }
 
@@ -1197,6 +1216,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void StartCreateTag(string? commitHash)
     {
+        CloseActionBars();
         TagTargetCommit = commitHash;
         NewTagName = string.Empty;
         NewTagMessage = string.Empty;

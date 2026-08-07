@@ -10,7 +10,7 @@ A .NET desktop application providing a visual git client. The goal is a first-cl
 - Click a file to see the line-by-line diff (syntax highlighted)
 - View uncommitted local changes (working tree + index)
 - Stage whole files or individual hunks and commit
-- Push / pull to/from a remote (via Git Credential Manager — no custom auth UI needed)
+- Create, clone, fetch, push and pull (via Git Credential Manager — no custom auth UI needed)
 - Compare the full codebase between any two commits (spanning all commits in between)
 - Preview a pull request locally: diff a branch against its merge base with the target, simulate the
   merge to find conflicts, review file by file, and copy the review out as markdown
@@ -23,7 +23,9 @@ These govern all work in this repo. They are not preferences — a change that b
 decision to raise, not to make quietly.
 
 1. **Thou shalt not call out unless it has explicitly been agreed.** The agreed outbound surface is
-   exactly one thing: `git.exe` push/pull, credentials handled by Git Credential Manager. Nothing
+   exactly one thing: `git.exe` push, pull, fetch and clone, credentials handled by Git Credential
+   Manager. (Fetch and clone were added on 2026-08-07, on request — see
+   `Scans/2026-08-07-repo-operations.html`.) Nothing
    else — no API client, no telemetry, no update check, no analytics, no third party endpoint —
    gets added on your own initiative, however convenient. Ask, get a yes, then write it. Silence is
    a no. Run `network-audit` after any change that could have added one. A GitHub API client via
@@ -85,7 +87,7 @@ decision to raise, not to make quietly.
 
 **100% CLI git backend:** All git operations go through `git.exe` via CliWrap. This is the same approach as GitHub Desktop, GitKraken, and Sourcetree. It gives us every git feature with zero library gaps — SSH works, hunk-level staging works, and Git Credential Manager handles authentication automatically. Use `--porcelain` and machine-readable output formats for reliable parsing.
 
-**Git Credential Manager:** Ships with Git for Windows and intercepts credential requests for push/pull automatically. There is no authentication, token or credential code in this app at all — that is the point, and it is the position to defend.
+**Git Credential Manager:** Ships with Git for Windows and intercepts credential requests for push, pull, fetch and clone automatically. There is no authentication, token or credential code in this app at all — that is the point, and it is the position to defend.
 
 **No hosting-provider API:** This is a git client, not a GitHub client. Pull requests, issues and code review live in the browser, where they are better. The Octokit integration that once did this was removed in favour of the browser; see `Scans/2026-08-02-github-removal.html`.
 

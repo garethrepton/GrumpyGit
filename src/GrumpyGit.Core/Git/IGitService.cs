@@ -31,9 +31,29 @@ public interface IGitService
 
     Task<string> CommitAsync(string repoPath, string message, CancellationToken ct = default);
 
-    Task PushAsync(string repoPath, string remote = "origin", string? branch = null, CancellationToken ct = default);
+    /// <summary>Replaces the tip commit with one carrying <paramref name="message"/> and whatever is staged.</summary>
+    Task<string> AmendCommitAsync(string repoPath, string message, CancellationToken ct = default);
+
+    /// <summary>Full message of the tip commit, for editing before an amend.</summary>
+    Task<string> GetHeadCommitMessageAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Publishes commits. With <paramref name="setUpstream"/> the pushed branch is also
+    /// recorded as tracking <paramref name="remote"/>, which a branch created locally has
+    /// no way of knowing otherwise.
+    /// </summary>
+    Task PushAsync(string repoPath, string remote = "origin", string? branch = null, bool setUpstream = false, CancellationToken ct = default);
 
     Task PullAsync(string repoPath, string remote = "origin", string? branch = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates remote-tracking refs without touching the working tree. With
+    /// <paramref name="prune"/>, tracking refs for branches deleted on the remote go too.
+    /// </summary>
+    Task FetchAsync(string repoPath, string remote = "origin", bool prune = true, CancellationToken ct = default);
+
+    /// <summary>True when <paramref name="branch"/> has an upstream configured.</summary>
+    Task<bool> HasUpstreamAsync(string repoPath, string branch, CancellationToken ct = default);
 
     Task<string> GetCommitRangeDiffAsync(string repoPath, string fromHash, string toHash, CancellationToken ct = default);
 
@@ -54,19 +74,80 @@ public interface IGitService
     /// <summary>Returns all local branch names.</summary>
     Task<IReadOnlyList<string>> GetBranchesAsync(string repoPath, CancellationToken ct = default);
 
+    /// <summary>
+    /// Remote-tracking branch names (<c>origin/main</c> …), excluding the remote's
+    /// symbolic HEAD, which is an alias rather than a branch anyone checks out.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetRemoteBranchesAsync(string repoPath, CancellationToken ct = default);
+
     /// <summary>Creates a new branch and checks it out immediately (git switch -c).</summary>
     Task CreateBranchAsync(string repoPath, string branchName, CancellationToken ct = default);
 
     /// <summary>Switches to an existing local branch.</summary>
     Task CheckoutBranchAsync(string repoPath, string branchName, CancellationToken ct = default);
 
+    /// <summary>
+    /// Checks out a local branch tracking <paramref name="remoteBranch"/>, creating it on
+    /// first use. Returns the local branch name.
+    /// </summary>
+    Task<string> CheckoutRemoteBranchAsync(string repoPath, string remoteBranch, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes a local branch. Without <paramref name="force"/>, git refuses to delete a
+    /// branch whose commits are not merged anywhere.
+    /// </summary>
+    Task DeleteBranchAsync(string repoPath, string branchName, bool force = false, CancellationToken ct = default);
+
+    /// <summary>Renames a local branch, keeping its config and reflog.</summary>
+    Task RenameBranchAsync(string repoPath, string oldName, string newName, CancellationToken ct = default);
+
     /// <summary>Merges the named branch into the current branch.</summary>
     Task MergeBranchAsync(string repoPath, string branchName, CancellationToken ct = default);
+
+    /// <summary>Applies one commit onto the current branch as a new commit.</summary>
+    Task CherryPickAsync(string repoPath, string commitHash, CancellationToken ct = default);
+
+    /// <summary>
+    /// Moves the current branch to <paramref name="commitHash"/>.
+    /// <see cref="ResetMode.Hard"/> discards working tree changes irrecoverably.
+    /// </summary>
+    Task ResetToCommitAsync(string repoPath, string commitHash, ResetMode mode, CancellationToken ct = default);
+
+    // ── Repository creation ──────────────────────────────────────────────────
+
+    /// <summary>Creates a repository in an existing directory (git init).</summary>
+    Task InitRepositoryAsync(string path, CancellationToken ct = default);
+
+    /// <summary>
+    /// Clones <paramref name="url"/> into a new folder under
+    /// <paramref name="parentDirectory"/> and returns the folder's path.
+    /// </summary>
+    Task<string> CloneAsync(string parentDirectory, string url, string? folderName = null, CancellationToken ct = default);
+
+    /// <summary>True when <paramref name="path"/> is inside a git working tree.</summary>
+    Task<bool> IsRepositoryAsync(string path, CancellationToken ct = default);
+
+    // ── Remotes ──────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Returns the push URL for the named remote, or an empty string if no remote is configured.
     /// </summary>
     Task<string> GetRemoteUrlAsync(string repoPath, string remote = "origin", CancellationToken ct = default);
+
+    /// <summary>Every configured remote with its fetch URL.</summary>
+    Task<IReadOnlyList<GitRemote>> GetRemotesAsync(string repoPath, CancellationToken ct = default);
+
+    /// <summary>Adds a remote.</summary>
+    Task AddRemoteAsync(string repoPath, string remote, string url, CancellationToken ct = default);
+
+    /// <summary>Points an existing remote at a different URL.</summary>
+    Task SetRemoteUrlAsync(string repoPath, string remote, string url, CancellationToken ct = default);
+
+    /// <summary>Renames a remote, rewriting its tracking refs.</summary>
+    Task RenameRemoteAsync(string repoPath, string oldName, string newName, CancellationToken ct = default);
+
+    /// <summary>Removes a remote and its tracking refs.</summary>
+    Task RemoveRemoteAsync(string repoPath, string remote, CancellationToken ct = default);
 
     // ── Stash ────────────────────────────────────────────────────────────────
 

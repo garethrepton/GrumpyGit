@@ -938,8 +938,54 @@ public class GitService : IGitService
         if (commitResult.ExitCode != 0)
             throw new GitException("git commit failed", commitResult.ExitCode, commitResult.StandardError);
 
-        // Resolve the hash of the newly created commit.
-        var revResult = await GitCmd()
+        return await ResolveHeadHashAsync(repoPath, ct);
+    }
+
+    public async Task<string> AmendCommitAsync(
+        string repoPath, string message, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        if (string.IsNullOrWhiteSpace(message))
+            throw new ArgumentException("Commit message must not be empty or whitespace.", nameof(message));
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("commit")
+                .Add("--amend")
+                .Add("-m")
+                .Add(message))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git commit --amend failed", result.ExitCode, result.StandardError);
+
+        return await ResolveHeadHashAsync(repoPath, ct);
+    }
+
+    public async Task<string> GetHeadCommitMessageAsync(
+        string repoPath, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("log")
+                .Add("-1")
+                .Add("--format=%B"))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        // A repository with no commits yet is not an error here — there is simply
+        // nothing to amend, and the caller shows an empty box.
+        return result.ExitCode == 0 ? result.StandardOutput.TrimEnd('\n', '\r') : string.Empty;
+    }
+
+    private static async Task<string> ResolveHeadHashAsync(string repoPath, CancellationToken ct)
+    {
+        var result = await GitCmd()
             .WithArguments(args => args
                 .Add("rev-parse")
                 .Add("HEAD"))
@@ -947,10 +993,10 @@ public class GitService : IGitService
             .WithValidation(CommandResultValidation.None)
             .ExecuteBufferedAsync(ct);
 
-        if (revResult.ExitCode != 0)
-            throw new GitException("git rev-parse HEAD failed", revResult.ExitCode, revResult.StandardError);
+        if (result.ExitCode != 0)
+            throw new GitException("git rev-parse HEAD failed", result.ExitCode, result.StandardError);
 
-        return revResult.StandardOutput.Trim();
+        return result.StandardOutput.Trim();
     }
 
     // -------------------------------------------------------------------------
@@ -958,12 +1004,16 @@ public class GitService : IGitService
     // -------------------------------------------------------------------------
 
     public async Task PushAsync(
-        string repoPath, string remote = "origin", string? branch = null, CancellationToken ct = default)
+        string repoPath, string remote = "origin", string? branch = null, bool setUpstream = false,
+        CancellationToken ct = default)
     {
         ValidateRepoPath(repoPath);
         ValidateRemote(remote);
         if (!string.IsNullOrEmpty(branch))
             ValidateBranch(branch);
+
+        if (setUpstream && string.IsNullOrEmpty(branch))
+            throw new ArgumentException("Setting an upstream requires the branch to be named.", nameof(setUpstream));
 
         var result = await GitCmd()
             .WithArguments(args =>
@@ -974,7 +1024,10 @@ public class GitService : IGitService
                 // nothing" and, for a tag-triggered CI release, means no build ever runs.
                 // It only sends annotated tags, and never tags outside what is pushed, so
                 // it cannot publish unrelated local tags.
-                args.Add("push").Add("--follow-tags").Add(remote);
+                args.Add("push").Add("--follow-tags");
+                if (setUpstream)
+                    args.Add("--set-upstream");
+                args.Add(remote);
                 if (!string.IsNullOrEmpty(branch))
                     args.Add(branch);
             })
@@ -1007,6 +1060,53 @@ public class GitService : IGitService
 
         if (result.ExitCode != 0)
             throw new GitException("git pull failed", result.ExitCode, result.StandardError);
+    }
+
+    public async Task FetchAsync(
+        string repoPath, string remote = "origin", bool prune = true, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateRemote(remote);
+
+        var result = await GitCmd()
+            .WithArguments(args =>
+            {
+                args.Add("fetch");
+                if (prune)
+                    args.Add("--prune");
+                args.Add(remote);
+            })
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git fetch failed", result.ExitCode, result.StandardError);
+    }
+
+    /// <summary>
+    /// Asked before a push so the upstream is only ever set when there is none. Passing
+    /// <c>--set-upstream</c> unconditionally would silently repoint a branch that
+    /// deliberately tracks a different remote.
+    /// </summary>
+    public async Task<bool> HasUpstreamAsync(
+        string repoPath, string branch, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateBranch(branch);
+
+        // Built after validation, and passed as one argv entry — no shell involved.
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("rev-parse")
+                .Add("--abbrev-ref")
+                .Add("--end-of-options")
+                .Add($"{branch}@{{upstream}}"))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        return result.ExitCode == 0;
     }
 
     // -------------------------------------------------------------------------
@@ -1108,6 +1208,119 @@ public class GitService : IGitService
 
         if (result.ExitCode != 0)
             throw new GitException("git switch failed", result.ExitCode, result.StandardError);
+    }
+
+    public async Task<IReadOnlyList<string>> GetRemoteBranchesAsync(
+        string repoPath, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("branch")
+                .Add("--list")
+                .Add("--remotes")
+                .Add("--format=%(refname:short)"))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git branch --remotes failed", result.ExitCode, result.StandardError);
+
+        return result.StandardOutput
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && !l.EndsWith("/HEAD", StringComparison.Ordinal))
+            .ToList();
+    }
+
+    public async Task<string> CheckoutRemoteBranchAsync(
+        string repoPath, string remoteBranch, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateBranch(remoteBranch);
+
+        var slash = remoteBranch.IndexOf('/');
+        if (slash <= 0 || slash == remoteBranch.Length - 1)
+            throw new ArgumentException(
+                $"Expected a remote-tracking branch of the form 'remote/branch': '{remoteBranch}'",
+                nameof(remoteBranch));
+
+        var localName = remoteBranch[(slash + 1)..];
+        await EnsureNotLinkedWorktreeAsync(repoPath, localName, ct);
+
+        // Once the local branch exists, --track would fail rather than switch to it, so
+        // the second visit to a remote branch is an ordinary checkout.
+        var existing = await GetBranchesAsync(repoPath, ct);
+        if (existing.Contains(localName, StringComparer.Ordinal))
+        {
+            await CheckoutBranchAsync(repoPath, localName, ct);
+            return localName;
+        }
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("switch")
+                .Add("--track")
+                .Add(remoteBranch))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git switch --track failed", result.ExitCode, result.StandardError);
+
+        return localName;
+    }
+
+    public async Task DeleteBranchAsync(
+        string repoPath, string branchName, bool force = false, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateBranch(branchName);
+
+        // git's own refusal names the branch but not the reason a client user cares
+        // about: they are standing on it.
+        var current = await GetCurrentBranchAsync(repoPath, ct);
+        if (string.Equals(current, branchName, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"'{branchName}' is the current branch. Switch to another branch before deleting it.");
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("branch")
+                .Add(force ? "-D" : "-d")
+                .Add("--end-of-options")
+                .Add(branchName))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git branch -d failed", result.ExitCode, result.StandardError);
+    }
+
+    public async Task RenameBranchAsync(
+        string repoPath, string oldName, string newName, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateBranch(oldName);
+        ValidateBranch(newName);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("branch")
+                .Add("-m")
+                .Add("--end-of-options")
+                .Add(oldName)
+                .Add(newName))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git branch -m failed", result.ExitCode, result.StandardError);
     }
 
     public async Task MergeBranchAsync(
@@ -1404,6 +1617,61 @@ public class GitService : IGitService
 
         if (result.ExitCode != 0)
             throw new GitException("git revert failed", result.ExitCode, result.StandardError);
+    }
+
+    public async Task CherryPickAsync(
+        string repoPath, string commitHash, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateHash(commitHash, nameof(commitHash));
+
+        // A merge commit has no single diff to apply; -m 1 picks the change relative to
+        // the mainline, which is the only reading that makes sense from a graph row.
+        var parentCount = await GetParentCountAsync(repoPath, commitHash, ct);
+
+        var result = await GitCmd()
+            .WithArguments(args =>
+            {
+                args.Add("cherry-pick");
+                if (parentCount > 1)
+                    args.Add("-m").Add("1");
+                args.Add(commitHash);
+            })
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git cherry-pick failed", result.ExitCode, result.StandardError);
+    }
+
+    public async Task ResetToCommitAsync(
+        string repoPath, string commitHash, ResetMode mode, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateHash(commitHash, nameof(commitHash));
+
+        var flag = mode switch
+        {
+            ResetMode.Soft => "--soft",
+            ResetMode.Mixed => "--mixed",
+            ResetMode.Hard => "--hard",
+            _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+        };
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                // No "--" here: after it git reads the operand as a pathspec, which is a
+                // different form of reset entirely and rejects --hard outright.
+                .Add("reset")
+                .Add(flag)
+                .Add(commitHash))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException($"git reset {flag} failed", result.ExitCode, result.StandardError);
     }
 
     public async Task<int> GetParentCountAsync(
@@ -2546,6 +2814,237 @@ public class GitService : IGitService
             .ExecuteBufferedAsync(ct);
 
         return MergeTreeParser.Parse(result.StandardOutput, result.ExitCode);
+    }
+
+    // -------------------------------------------------------------------------
+    // Repository creation
+    // -------------------------------------------------------------------------
+
+    private static readonly System.Text.RegularExpressions.Regex FolderNamePattern =
+        new(@"^[A-Za-z0-9._\-]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Accepts the transports a clone can legitimately use and nothing else.
+    ///
+    /// The URL is typed by the user but ends up as an argument to a command that will
+    /// connect somewhere, so the shapes are enumerated rather than pattern-matched
+    /// loosely: an unrecognised scheme is a refusal, not a best effort.
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex RemoteUrlPattern =
+        new(@"^(?:https?://|ssh://|git://|file:///)[^\s]+$|^[A-Za-z0-9._\-]+@[A-Za-z0-9._\-]+:[^\s]+$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static void ValidateRemoteUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            throw new ArgumentException("Remote URL must not be empty.", nameof(url));
+        if (url.StartsWith('-'))
+            throw new ArgumentException($"Remote URL must not start with '-': '{url}'", nameof(url));
+        if (url.Any(char.IsControl))
+            throw new ArgumentException("Remote URL must not contain control characters.", nameof(url));
+
+        // A local path is a valid clone source and cannot be expressed by the URL forms.
+        if (Path.IsPathRooted(url) && Directory.Exists(url))
+            return;
+
+        if (!RemoteUrlPattern.IsMatch(url))
+            throw new ArgumentException(
+                $"Unsupported remote URL: '{url}'. Expected https://, ssh://, git://, file:///, " +
+                "user@host:path, or a local directory.",
+                nameof(url));
+    }
+
+    public async Task InitRepositoryAsync(string path, CancellationToken ct = default)
+    {
+        ValidateRepoPath(path);
+
+        if (await IsRepositoryAsync(path, ct))
+            throw new InvalidOperationException($"'{path}' is already inside a git repository.");
+
+        var result = await GitCmd()
+            .WithArguments(args => args.Add("init"))
+            .WithWorkingDirectory(path)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git init failed", result.ExitCode, result.StandardError);
+    }
+
+    public async Task<string> CloneAsync(
+        string parentDirectory, string url, string? folderName = null, CancellationToken ct = default)
+    {
+        ValidateRepoPath(parentDirectory);
+        ValidateRemoteUrl(url);
+
+        var name = string.IsNullOrWhiteSpace(folderName) ? DeriveCloneFolderName(url) : folderName.Trim();
+        if (name is "." or ".." || !FolderNamePattern.IsMatch(name))
+            throw new ArgumentException(
+                $"Invalid folder name '{name}'. Letters, digits, dot, dash and underscore only.",
+                nameof(folderName));
+
+        var target = Path.Combine(parentDirectory, name);
+        if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
+            throw new InvalidOperationException($"'{target}' already exists and is not empty.");
+
+        // git resolves the destination itself; passing it explicitly keeps the name the
+        // user chose rather than whatever the URL's last segment happens to be.
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("clone")
+                .Add("--")
+                .Add(url)
+                .Add(target))
+            .WithWorkingDirectory(parentDirectory)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git clone failed", result.ExitCode, result.StandardError);
+
+        return target;
+    }
+
+    private static string DeriveCloneFolderName(string url)
+    {
+        var trimmed = url.TrimEnd('/', '\\');
+        var lastSeparator = trimmed.LastIndexOfAny(['/', '\\', ':']);
+        var name = lastSeparator >= 0 ? trimmed[(lastSeparator + 1)..] : trimmed;
+        return name.EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+    }
+
+    public async Task<bool> IsRepositoryAsync(string path, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            return false;
+
+        var result = await GitCmd()
+            .WithArguments(args => args.Add("rev-parse").Add("--is-inside-work-tree"))
+            .WithWorkingDirectory(path)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        return result.ExitCode == 0
+               && result.StandardOutput.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // -------------------------------------------------------------------------
+    // Remotes
+    // -------------------------------------------------------------------------
+
+    public async Task<IReadOnlyList<GitRemote>> GetRemotesAsync(
+        string repoPath, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+
+        var result = await GitCmd()
+            .WithArguments(args => args.Add("remote").Add("-v"))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git remote -v failed", result.ExitCode, result.StandardError);
+
+        // Each remote appears twice — "(fetch)" then "(push)". One row per remote is
+        // what the UI edits, and set-url writes both, so the push line is dropped.
+        var remotes = new List<GitRemote>();
+        foreach (var line in result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Trim().Split('\t');
+            if (parts.Length != 2 || !parts[1].EndsWith("(fetch)", StringComparison.Ordinal))
+                continue;
+
+            remotes.Add(new GitRemote(parts[0], parts[1][..^"(fetch)".Length].Trim()));
+        }
+
+        return remotes;
+    }
+
+    public async Task AddRemoteAsync(
+        string repoPath, string remote, string url, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateRemote(remote);
+        ValidateRemoteUrl(url);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("remote")
+                .Add("add")
+                .Add("--")
+                .Add(remote)
+                .Add(url))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git remote add failed", result.ExitCode, result.StandardError);
+    }
+
+    public async Task SetRemoteUrlAsync(
+        string repoPath, string remote, string url, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateRemote(remote);
+        ValidateRemoteUrl(url);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("remote")
+                .Add("set-url")
+                .Add("--")
+                .Add(remote)
+                .Add(url))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git remote set-url failed", result.ExitCode, result.StandardError);
+    }
+
+    public async Task RenameRemoteAsync(
+        string repoPath, string oldName, string newName, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateRemote(oldName);
+        ValidateRemote(newName);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("remote")
+                .Add("rename")
+                .Add("--")
+                .Add(oldName)
+                .Add(newName))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git remote rename failed", result.ExitCode, result.StandardError);
+    }
+
+    public async Task RemoveRemoteAsync(
+        string repoPath, string remote, CancellationToken ct = default)
+    {
+        ValidateRepoPath(repoPath);
+        ValidateRemote(remote);
+
+        var result = await GitCmd()
+            .WithArguments(args => args
+                .Add("remote")
+                .Add("remove")
+                .Add("--")
+                .Add(remote))
+            .WithWorkingDirectory(repoPath)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync(ct);
+
+        if (result.ExitCode != 0)
+            throw new GitException("git remote remove failed", result.ExitCode, result.StandardError);
     }
 
     // -------------------------------------------------------------------------
