@@ -33,6 +33,10 @@ public partial class MainWindowViewModel
         StagedFiles.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasStagedFiles));
         RepoNodes.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasRepoNodes));
 
+        // Reads the configured model path only — the weights themselves load lazily, on
+        // the first diff, so startup pays nothing for a feature that may not be used.
+        InitialiseLocalModelFromSettings();
+
         // Reopen last session's repositories. Deferred to the dispatcher so the
         // constructor returns immediately and the window paints before repo I/O
         // begins — otherwise startup blocks on git for every restored repo.

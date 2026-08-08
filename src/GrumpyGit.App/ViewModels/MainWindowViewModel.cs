@@ -181,6 +181,7 @@ public partial class MainWindowViewModel : ViewModelBase
         DiffFilePath = null;
         SelectedFile = null;
         OnPropertyChanged(nameof(IsWorkingTreeSelected));
+        OnPropertyChanged(nameof(CanRunAiScan));
         if (value is not null)
         {
             _ = value.IsWorkingTree ? LoadWorkingTreeFilesAsync() : LoadCommitFilesAsync(value);
@@ -224,6 +225,11 @@ public partial class MainWindowViewModel : ViewModelBase
             MarkNotedFiles();
             RebuildFileTree();
 
+            // The overview reads the shape of the change, so it can only be asked for once
+            // the file list is known — which is here, not when the row was clicked.
+            RequestChangeSetReview("Uncommitted working tree changes",
+                StagedFiles.Concat(ChangedFiles));
+
             StashEntries.Clear();
             foreach (var s in stashTask.Result)
                 StashEntries.Add(s);
@@ -256,6 +262,11 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             MarkNotedFiles();
             RebuildFileTree();
+
+            // The commit's own subject is the best hint available about intent, and the
+            // model is told it plainly rather than being left to infer it from paths.
+            RequestChangeSetReview(commit.Subject, ChangedFiles);
+
             StatusMessage = $"{files.Count} file(s) changed";
         }
         catch (Exception ex)
@@ -348,8 +359,12 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         DiffHunks.Clear();
 
-        // Only show hunk buttons for working tree diffs
-        if (!IsWorkingTreeSelected || parsed.Hunks.Count == 0)
+        // Only show hunk buttons for working tree diffs.
+        //
+        // An untracked file now carries a hunk too, so that the model can review it — but it
+        // has no "diff --git" header, and a patch built without one does not apply. Staging
+        // one of these is "git add the file", which the file row already offers.
+        if (!IsWorkingTreeSelected || parsed.Hunks.Count == 0 || parsed.FileHeaderLines.Count == 0)
             return;
 
         int total = parsed.Hunks.Count;
@@ -1333,7 +1348,13 @@ public partial class MainWindowViewModel : ViewModelBase
             if (int.TryParse(SettingsAutoFetchInterval, out var fetchInterval) && fetchInterval >= 0)
                 settings.AutoFetchIntervalSeconds = fetchInterval;
 
+            settings.LocalModelPath = SettingsLocalModelPath.Trim();
+
             settings.Save();
+
+            // Takes effect on the next diff rather than at the next restart — a model
+            // chosen in a dialog that then appears to do nothing reads as broken.
+            ApplyLocalModelSetting(settings.LocalModelPath);
             IsSettingsVisible = false;
             ShowToast("Settings saved", Controls.ToastSeverity.Info);
         }
@@ -1359,6 +1380,7 @@ public partial class MainWindowViewModel : ViewModelBase
             SettingsDiffContextLines = settings.DiffContextLines.ToString();
             SettingsTheme = settings.Theme == "light" ? "Light" : "Dark";
             SettingsAutoFetchInterval = settings.AutoFetchIntervalSeconds.ToString();
+            SettingsLocalModelPath = settings.LocalModelPath;
 
             SettingsGitUserName = await GitConfigService.GetGlobalConfigAsync("user.name");
             SettingsGitUserEmail = await GitConfigService.GetGlobalConfigAsync("user.email");

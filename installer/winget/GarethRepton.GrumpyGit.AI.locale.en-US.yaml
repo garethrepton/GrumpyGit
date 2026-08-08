@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: GarethRepton.GrumpyGit.AI
+PackageVersion: __VERSION__
+PackageLocale: en-US
+
+Publisher: Gareth Repton
+PublisherUrl: https://github.com/garethrepton
+PublisherSupportUrl: https://github.com/garethrepton/GrumpyGit/issues
+
+PackageName: Grumpy AI (Experimental)
+PackageUrl: https://github.com/garethrepton/GrumpyGit
+Moniker: grumpy-ai
+
+License: Apache-2.0
+LicenseUrl: https://github.com/garethrepton/GrumpyGit/blob/master/LICENSE
+Copyright: Copyright (c) Gareth Repton
+
+ShortDescription: EXPERIMENTAL - Grumpy, plus an offline local model that reviews the diff.
+Description: >-
+  EXPERIMENTAL. Everything in GrumpyGit - the interactive commit graph, hunk and
+  line staging, push and pull through Git Credential Manager, and the split,
+  single-column, blink and moved-block diff views - with an added local review pass
+  that reads a change and flags what looks risky. The review is a suggestion and
+  not a verdict: it will miss real bugs and flag things that are fine, so read the
+  diff yourself. Behaviour, settings and the model catalogue may change between
+  releases. The git operations themselves are unchanged. The model runs in-process
+  on your machine and no weights are shipped: you pick one from a short catalogue
+  and download it on a button press. Nothing about your code leaves the machine.
+  This is a separate install from GarethRepton.GrumpyGit and a much larger
+  download; for the stable client with no AI in it, install that one instead.
+
+Tags:
+  - git
+  - diff
+  - version-control
+  - source-control
+  - avalonia
+  - dotnet
+  - llm
+  - local-ai
+  - code-review
+  - experimental
+
+ReleaseNotesUrl: https://github.com/garethrepton/GrumpyGit/releases/tag/ai-v__VERSION__
+
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

@@ -305,6 +305,15 @@ public static class UnifiedDiffParser
     /// <summary>
     /// For untracked files where git diff returns nothing -- display raw content
     /// as all-added lines on the right with an empty left side.
+    ///
+    /// The hunk built here is what makes a new file reviewable. Without it the editor drew
+    /// the content correctly and everything downstream saw an empty diff: no review, no
+    /// notebook sections, no change numbering — a new file was the one thing the local model
+    /// never read, which is the opposite of what you want from a file that is entirely new.
+    ///
+    /// <c>FileHeaderLines</c> is deliberately left empty. There is no <c>diff --git</c>
+    /// header for a file git does not track yet, and a patch built without one would not
+    /// apply — see the guard in the viewmodel that keeps hunk staging off for these.
     /// </summary>
     public static ParsedDiff ParseRawContent(string content)
     {
@@ -315,12 +324,29 @@ public static class UnifiedDiffParser
         var leftText  = string.Join("\n", Enumerable.Repeat(string.Empty, lines.Count));
         var rightText = string.Join("\n", lines);
 
+        // No header row is rendered, so line i of the document is line i of the file.
+        var hunk = new DiffHunk
+        {
+            Index = 0,
+            HeaderLine = $"@@ -0,0 +1,{lines.Count} @@",
+            RenderedLineNumber = 1,
+            Lines = lines.Select((text, i) => new DiffLine
+            {
+                Type = DiffLineType.Added,
+                Content = text,
+                OldLineNumber = -1,
+                NewLineNumber = i + 1,
+                RenderedLineNumber = i + 1,
+            }).ToList(),
+        };
+
         return new ParsedDiff(
             leftText,
             rightText,
             Array.Empty<int>(),
             addedIndices,
-            Array.Empty<int>());
+            Array.Empty<int>(),
+            hunks: [hunk]);
     }
 
     /// <summary>

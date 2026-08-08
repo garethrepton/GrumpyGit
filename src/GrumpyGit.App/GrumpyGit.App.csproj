@@ -13,11 +13,16 @@
          references avares://Grumpy/... and must be kept in step with this. -->
     <AssemblyName>Grumpy</AssemblyName>
     <RootNamespace>GrumpyGit.App</RootNamespace>
-    <ApplicationIcon>Assets\sheep.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\sheep-ai.ico</ApplicationIcon>
 
-    <Product>Grumpy</Product>
-    <AssemblyTitle>Grumpy</AssemblyTitle>
-    <Description>A visual git client built around reviewing AI-authored changes.</Description>
+    <!-- EDITION MARKER. This branch builds the AI edition; master builds the
+         standard one and keeps these as "Grumpy". They are separate installs that
+         can sit side by side, so the window title, the exe's file properties and
+         the installer must all name the same one — everything reads it from here.
+         AssemblyName stays Grumpy: avares:// URIs are keyed on it. -->
+    <Product>Grumpy AI (Experimental)</Product>
+    <AssemblyTitle>Grumpy AI (Experimental)</AssemblyTitle>
+    <Description>EXPERIMENTAL. Grumpy, plus an offline local model that reviews the diff.</Description>
   </PropertyGroup>
 
   <ItemGroup>

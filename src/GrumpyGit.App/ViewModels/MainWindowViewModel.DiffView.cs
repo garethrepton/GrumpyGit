@@ -275,15 +275,30 @@ public partial class MainWindowViewModel
 
     public bool IsSideBySideView => DiffViewMode == DiffViewMode.SideBySide;
     public bool IsGhostView => DiffViewMode == DiffViewMode.Ghost;
+    public bool IsNotebookView => DiffViewMode == DiffViewMode.Notebook;
+
+    /// <summary>
+    /// The editor draws every mode but this one, which is its own control — so it has to
+    /// stand down rather than render underneath.
+    /// </summary>
+    public bool IsEditorDiffVisible => IsTextDiffVisible && !IsNotebookView;
+
+    public bool IsNotebookDiffVisible => IsTextDiffVisible && IsNotebookView;
 
     partial void OnDiffViewModeChanged(DiffViewMode value)
     {
         OnPropertyChanged(nameof(IsSideBySideView));
         OnPropertyChanged(nameof(IsGhostView));
+        OnPropertyChanged(nameof(IsNotebookView));
+        OnPropertyChanged(nameof(IsEditorDiffVisible));
+        OnPropertyChanged(nameof(IsNotebookDiffVisible));
 
         // Hunk buttons and the minimap belong to the side-by-side layout; the other
         // modes have no second pane to anchor them to.
         OnPropertyChanged(nameof(CanToggleStagingForCurrentFile));
+
+        if (value == DiffViewMode.Notebook)
+            RebuildNotebook();
     }
 
     [RelayCommand]
@@ -291,6 +306,57 @@ public partial class MainWindowViewModel
 
     [RelayCommand]
     private void ShowGhostView() => DiffViewMode = DiffViewMode.Ghost;
+
+    [RelayCommand]
+    private void ShowNotebookView() => DiffViewMode = DiffViewMode.Notebook;
+
+    // ── Notebook ──────────────────────────────────────────────────────────────
+
+    /// <summary>Sections: one hunk each, with the model's reading of it above.</summary>
+    public ObservableCollection<NotebookCellViewModel> NotebookCells { get; } = new();
+
+    public bool HasNotebookCells => NotebookCells.Count > 0;
+
+    /// <summary>
+    /// Rebuilt whenever the diff or the review changes.
+    ///
+    /// Cheap enough to do wholesale — it is a projection over hunks already in memory —
+    /// and the alternative, patching notes into existing cells as the review lands, means
+    /// two code paths for a list that is rebuilt on every file change anyway. Skipped
+    /// entirely unless the notebook is the mode on screen, since nothing else reads it.
+    /// </summary>
+    partial void OnCurrentDiffChanged(ParsedDiff? value)
+    {
+        RebuildNotebook();
+        OnPropertyChanged(nameof(DiffReviewDetail));
+        OnPropertyChanged(nameof(HasDiffReviewDetail));
+    }
+
+    private void RebuildNotebook()
+    {
+        NotebookCells.Clear();
+
+        if (IsNotebookView)
+            foreach (var cell in NotebookCellViewModel.Build(
+                         CurrentDiff, DiffChangeNotes, DiffReviewIssues.Select(i => i.Model).ToList(),
+                         DiffChangeConcerns))
+            {
+                cell.IsReviewRunning = IsDiffReviewRunning;
+                NotebookCells.Add(cell);
+            }
+
+        OnPropertyChanged(nameof(HasNotebookCells));
+    }
+
+    /// <summary>
+    /// Sections say "reading…" while the model works rather than "No reading", which would
+    /// claim it had looked and found nothing to say.
+    /// </summary>
+    private void UpdateNotebookRunningState(bool running)
+    {
+        foreach (var cell in NotebookCells)
+            cell.IsReviewRunning = running;
+    }
 
 
     /// <summary>Colour blocks that only moved as moved. Side-by-side only.</summary>
@@ -305,6 +371,18 @@ public partial class MainWindowViewModel
     public ObservableCollection<SymbolChangeViewModel> ChangeSummary { get; } = new();
 
     [ObservableProperty] private bool _isChangeSummaryVisible = true;
+
+    /// <summary>
+    /// One sentence on what this file's diff did, computed from the diff itself. Always
+    /// present — it needs no model, no configuration and no network, so every file has a
+    /// description whether or not local review is set up.
+    /// </summary>
+    [ObservableProperty] private string _fileChangeDescription = string.Empty;
+
+    public bool HasFileChangeDescription => !string.IsNullOrEmpty(FileChangeDescription);
+
+    partial void OnFileChangeDescriptionChanged(string value)
+        => OnPropertyChanged(nameof(HasFileChangeDescription));
 
     [ObservableProperty] private string _changeSummaryHeader = string.Empty;
 
@@ -342,10 +420,13 @@ public partial class MainWindowViewModel
             ChangeSummaryHeader = summary.Symbols.Count == 1
                 ? $"1 symbol  ·  +{summary.Added} −{summary.Removed}"
                 : $"{summary.Symbols.Count} symbols  ·  +{summary.Added} −{summary.Removed}";
+
+            FileChangeDescription = FileChangeDescriber.Describe(summary, parsed);
         }
         else
         {
             ChangeSummaryHeader = string.Empty;
+            FileChangeDescription = string.Empty;
         }
 
         OnPropertyChanged(nameof(HasChangeSummary));
@@ -472,6 +553,10 @@ public partial class MainWindowViewModel
         DiffChangeCount = _changeAnchors.Length;
 
         RebuildChangeSummary(parsed);
+
+        // Every diff asks the local model for a reading. Fire and forget by design: this
+        // runs on the render path, and the diff must not wait for a model to answer.
+        RequestDiffReview(DiffFilePath, parsed);
 
         // Open on the first change instead of line 1. Full-file mode renders the whole
         // file, so the first edit is routinely hundreds of lines down and the reader

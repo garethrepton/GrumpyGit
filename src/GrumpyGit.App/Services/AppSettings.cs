@@ -17,6 +17,19 @@ public class AppSettings
     public int MaxRecentRepos { get; set; } = 10;
 
     /// <summary>
+    /// A GGUF model file the user already has, used to review diffs locally. Empty means
+    /// the feature is off. Only the path is stored — never a prompt, a diff or an answer.
+    /// </summary>
+    public string LocalModelPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Set when the user turns down the offer to fetch a model. The offer is then never
+    /// shown again — an invitation that returns every session is nagging, not helpfulness.
+    /// Settings still has the button for anyone who changes their mind.
+    /// </summary>
+    public bool LocalModelOfferDeclined { get; set; }
+
+    /// <summary>
     /// Repositories that were open as tabs when the app last closed, restored on
     /// startup so a multi-repo workspace survives a restart.
     /// </summary>

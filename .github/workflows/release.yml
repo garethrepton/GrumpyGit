@@ -1,11 +1,20 @@
-name: Build installer
+name: Build Grumpy AI installer
 
-# Tag-driven releases, plus a manual button so the installer can be built and
-# downloaded as an artifact without publishing anything.
+# BRANCH-OWNED WORKFLOW. This builds Grumpy AI and nothing else; `master` carries
+# its own copy that builds Grumpy. The two will conflict on every merge across the
+# branches — resolve by keeping the branch's own copy. Do not reintroduce an
+# edition switch: one branch, one product, one workflow.
+#
+# Grumpy AI has its own tag chain so the two products get separate releases and
+# separate download links. Tags are `ai-v1.2.3`; `master` uses `v1.2.3`, and the
+# two are versioned independently.
+#
+# Plus a manual button so the installer can be built and downloaded as an artifact
+# without publishing anything.
 on:
   push:
     tags:
-      - 'v*'
+      - 'ai-v*'
   workflow_dispatch:
     inputs:
       version:
@@ -16,38 +25,70 @@ on:
 permissions:
   contents: write   # needed to create the release; nothing else
 
+env:
+  # The display name — what Apps & features, the Start menu and the release title
+  # show. It carries the experimental warning on purpose.
+  PRODUCT: Grumpy AI (Experimental)
+  # The folder name, deliberately without the bracketed suffix: a path with
+  # brackets in it only makes trouble for scripts. These two differ — don't use
+  # one where the other is meant.
+  INSTALL_DIR: Grumpy AI
+  SLUG: Grumpy-AI
+  ZIP_ROOT: GrumpyAI
+
 jobs:
   build-installer:
     runs-on: windows-latest
 
-    # The whole job takes ~2.5 minutes. A cap well above that turns any hang into a
-    # prompt failure instead of a run that sits burning minutes until somebody notices —
-    # which is what happened when a silent uninstall stopped on an unanswerable prompt.
-    timeout-minutes: 15
+    # A cap well above the ~5 minute run turns any hang into a prompt failure
+    # instead of a run that sits burning minutes until somebody notices — which is
+    # what happened when a silent uninstall stopped on an unanswerable prompt.
+    # The local model runtime adds several hundred MB to publish, hence the room.
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Release notes are generated against the previous tag in this chain,
+          # which means the tag list has to be here.
+          fetch-depth: 0
+
+      # A tag push gives ai-v1.2.3; strip the prefix. A manual run uses the input.
+      # Everything downstream reads this one value, so the assembly, the installer
+      # filename, the winget manifest and the release tag cannot disagree.
+      - name: Resolve version
+        id: build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_REF -like 'refs/tags/ai-v*') {
+            $version = $env:GITHUB_REF -replace '^refs/tags/ai-v', ''
+          } else {
+            $version = '${{ github.event.inputs.version }}'
+            if ([string]::IsNullOrWhiteSpace($version)) { $version = '0.0.0' }
+          }
+
+          "version=$version"                                            | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "portable=dist/$env:SLUG-$version-win-x64-portable.zip"        | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          Write-Host "Building $env:PRODUCT $version"
+
+      # This workflow only makes sense on a tree that carries the model runtime.
+      # If it ever lands on master by a careless merge, fail here rather than
+      # publish a Grumpy build under the Grumpy AI name.
+      - name: Verify this is the AI branch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((Get-Content src/GrumpyGit.Core/GrumpyGit.Core.csproj -Raw) -notmatch 'LLamaSharp') {
+            throw 'This tree has no LLamaSharp reference — this workflow belongs on the AI branch only.'
+          }
+          Write-Host 'OK: local model runtime present'
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
-
-      # A tag push gives v1.2.3; strip the leading v. A manual run uses the
-      # supplied input. Everything downstream reads this one value so the
-      # assembly, the installer filename and the release tag cannot disagree.
-      - name: Resolve version
-        id: version
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_REF -like 'refs/tags/v*') {
-            $v = $env:GITHUB_REF -replace '^refs/tags/v', ''
-          } else {
-            $v = '${{ github.event.inputs.version }}'
-            if ([string]::IsNullOrWhiteSpace($v)) { $v = '0.0.0' }
-          }
-          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "Building version $v"
 
       - name: Restore
         run: dotnet restore GrumpyGit.sln
@@ -69,24 +110,41 @@ jobs:
           -c Release
           -r win-x64
           --self-contained true
-          -p:Version=${{ steps.version.outputs.version }}
-          -p:AssemblyVersion=${{ steps.version.outputs.version }}.0
-          -p:FileVersion=${{ steps.version.outputs.version }}.0
+          -p:Version=${{ steps.build.outputs.version }}
+          -p:AssemblyVersion=${{ steps.build.outputs.version }}.0
+          -p:FileVersion=${{ steps.build.outputs.version }}.0
           -p:DebugType=none
           -o publish
 
+      # "No weights ship" is a claim made in the README, the winget description and
+      # the installer's own notice page. This is what makes it true rather than
+      # asserted — a stray .gguf committed or copied into the tree fails the build
+      # instead of becoming an 18 GB release asset.
       - name: Verify publish output
         shell: pwsh
         run: |
-          $exe = 'publish/Grumpy.exe'
-          if (-not (Test-Path $exe)) { throw "Expected $exe was not produced" }
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path 'publish/Grumpy.exe')) { throw 'Expected publish/Grumpy.exe was not produced' }
+
+          $runtime = Get-ChildItem publish -Recurse -File | Where-Object { $_.Name -match '(?i)llama|ggml' }
+          if (-not $runtime) {
+            throw 'Published without any model runtime files — the backend did not come through.'
+          }
+
+          $weights = Get-ChildItem publish -Recurse -File -Filter *.gguf
+          if ($weights) {
+            throw "Model weights must never ship in the build: $($weights.Name -join ', ')"
+          }
+
           $size = [math]::Round((Get-ChildItem publish -Recurse | Measure-Object Length -Sum).Sum / 1MB, 1)
+          Write-Host "OK: $($runtime.Count) model runtime file(s), no weights"
           Write-Host "publish/ contains $((Get-ChildItem publish -Recurse -File).Count) files, $size MB"
 
       # Same self-contained output as the installer ships, just unzipped by hand.
-      # Everything sits under a single Grumpy\ root so unzipping into Downloads
-      # does not scatter a few hundred loose files, and so the winget portable
-      # manifest has a stable path to point its command alias at.
+      # Everything sits under a single GrumpyAI\ root so unzipping into Downloads
+      # does not scatter a few hundred loose files, so it cannot collide with a
+      # Grumpy zip unpacked in the same place, and so the winget portable manifest
+      # has a stable path to point its command alias at.
       #
       # ZipFile rather than Compress-Archive: the publish tree is several hundred
       # files and Compress-Archive takes minutes over it.
@@ -95,14 +153,13 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = '${{ steps.version.outputs.version }}'
+          $zip = '${{ steps.build.outputs.portable }}'
           New-Item -ItemType Directory -Force -Path dist, staging | Out-Null
-          Copy-Item publish -Destination staging/Grumpy -Recurse -Force
+          Copy-Item publish -Destination "staging/$env:ZIP_ROOT" -Recurse -Force
 
-          $zip = "dist/Grumpy-$version-win-x64-portable.zip"
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           [IO.Compression.ZipFile]::CreateFromDirectory(
-            (Resolve-Path staging/Grumpy),
+            (Resolve-Path "staging/$env:ZIP_ROOT"),
             (Join-Path $PWD $zip),
             [IO.Compression.CompressionLevel]::Optimal,
             $true)
@@ -111,18 +168,18 @@ jobs:
           "sha256=$sha" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "{0} MB, SHA256 {1}" -f [math]::Round((Get-Item $zip).Length / 1MB, 1), $sha | Write-Host
 
-      # The manifest names Grumpy\Grumpy.exe. If the zip layout ever drifts from
-      # that, winget installs a shim pointing at nothing and the failure only
-      # shows up on a user's machine — so prove it here instead.
+      # The manifest names GrumpyAI\Grumpy.exe. If the zip layout ever drifts from
+      # that, winget installs a shim pointing at nothing and the failure only shows
+      # up on a user's machine — so prove it here instead.
       - name: Verify portable zip layout
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $zip = Get-ChildItem dist/*-portable.zip | Select-Object -First 1
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, (Join-Path $PWD 'ziptest'))
+          [IO.Compression.ZipFile]::ExtractToDirectory(
+            (Resolve-Path '${{ steps.build.outputs.portable }}'), (Join-Path $PWD 'ziptest'))
 
-          $manifest = Get-Content installer/winget/GarethRepton.GrumpyGit.installer.yaml -Raw
+          $manifest = Get-Content installer/winget/GarethRepton.GrumpyGit.AI.installer.yaml -Raw
           if ($manifest -notmatch '(?m)^\s*-\s*RelativeFilePath:\s*(\S+)\s*$') {
             throw 'Could not read RelativeFilePath from the winget installer manifest'
           }
@@ -144,7 +201,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist/winget | Out-Null
           Get-ChildItem installer/winget/*.yaml | ForEach-Object {
             ($_ | Get-Content -Raw).
-              Replace('__VERSION__', '${{ steps.version.outputs.version }}').
+              Replace('__VERSION__', '${{ steps.build.outputs.version }}').
               Replace('__SHA256__', '${{ steps.portable.outputs.sha256 }}').
               Replace('__RELEASE_DATE__', (Get-Date -Format 'yyyy-MM-dd')) |
               Set-Content (Join-Path 'dist/winget' $_.Name) -Encoding utf8 -NoNewline
@@ -163,16 +220,17 @@ jobs:
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
           & $iscc `
-            "/DAppVersion=${{ steps.version.outputs.version }}" `
+            "/DAppVersion=${{ steps.build.outputs.version }}" `
             "/DPublishDir=..\publish" `
             "installer\Grumpy.iss"
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 
       # Prove the installer does what it claims: installs per-user with no
-      # elevation, lands in LocalAppData, registers an uninstaller in HKCU, and
-      # then actually uninstalls. The runner user is an admin, so this does not
-      # prove the absence of a UAC prompt — PrivilegesRequired=lowest is what
-      # guarantees that, and it is asserted separately below.
+      # elevation, lands in its own LocalAppData folder under its own display
+      # name, registers an uninstaller in HKCU, and then actually uninstalls. The
+      # runner user is an admin, so this does not prove the absence of a UAC
+      # prompt — PrivilegesRequired=lowest is what guarantees that, and it is
+      # asserted separately below.
       - name: Verify install and uninstall
         shell: pwsh
         run: |
@@ -180,37 +238,43 @@ jobs:
           $setup = Get-ChildItem dist/*.exe | Select-Object -First 1
           Write-Host "Testing $($setup.Name)"
 
-          # /VERYSILENT with no /ALLUSERS keeps it in per-user mode.
+          # /VERYSILENT with no /ALLUSERS keeps it in per-user mode. It also skips
+          # the experimental notice page, which is exactly what a silent install
+          # should do — the page's presence is asserted separately below.
           Start-Process -FilePath $setup.FullName `
             -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
 
-          $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Grumpy'
+          # Display name and folder name differ — see the env block at the top.
+          $installDir = Join-Path $env:LOCALAPPDATA "Programs\$env:INSTALL_DIR"
           if (-not (Test-Path (Join-Path $installDir 'Grumpy.exe'))) {
             throw "Install did not place the exe in $installDir"
           }
           Write-Host "OK: installed to $installDir (no admin required)"
 
           # The uninstall entry must be under HKCU, not HKLM — that is what makes
-          # it a per-user install that shows in this user's Apps & features.
+          # it a per-user install that shows in this user's Apps & features — and
+          # it must carry the experimental display name, or Grumpy and Grumpy AI
+          # would be indistinguishable in Apps & features.
           $key = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
-                 Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq 'Grumpy' }
-          if (-not $key) { throw 'No per-user uninstall entry found in HKCU' }
+                 Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq $env:PRODUCT }
+          if (-not $key) { throw "No per-user uninstall entry named '$env:PRODUCT' found in HKCU" }
 
           $props = Get-ItemProperty $key.PSPath
           Write-Host "OK: uninstall entry '$($props.DisplayName)' $($props.DisplayVersion)"
 
           if (Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
-              Where-Object { (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName -eq 'Grumpy' }) {
+              Where-Object { (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName -eq $env:PRODUCT }) {
             throw 'Found a machine-wide (HKLM) uninstall entry — this should be per-user only'
           }
           Write-Host 'OK: no machine-wide entry'
 
           # Now uninstall. /SUPPRESSMSGBOXES answers the "delete your data?"
           # prompt with its default (No), so settings survive — which is the
-          # intended behaviour.
-          # Bounded wait. A silent uninstall that stops on a prompt would otherwise block
-          # until the job timeout, and "hung" is a much harder failure to read than
-          # "uninstaller did not exit".
+          # intended behaviour, and doubly so since the data directory is shared
+          # with Grumpy.
+          # Bounded wait. A silent uninstall that stops on a prompt would otherwise
+          # block until the job timeout, and "hung" is a much harder failure to
+          # read than "uninstaller did not exit".
           $uninstaller = $props.UninstallString -replace '"',''
           $proc = Start-Process -FilePath $uninstaller `
             -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
@@ -231,7 +295,7 @@ jobs:
           Write-Host 'OK: uninstall removed all installed files'
 
           $stillThere = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
-                        Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq 'Grumpy' }
+                        Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq $env:PRODUCT }
           if ($stillThere) { throw 'Uninstall left its registry entry behind' }
           Write-Host 'OK: uninstall removed the registry entry'
 
@@ -246,17 +310,35 @@ jobs:
           }
           Write-Host 'OK: PrivilegesRequired=lowest'
 
+      # The experimental warning is only worth anything if it cannot quietly fall
+      # off. It has to survive in the display name the user actually sees, in the
+      # exe metadata the window title reads, and as a notice page in the wizard.
+      - name: Assert this build is labelled experimental
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PRODUCT -notmatch '(?i)experimental') {
+            throw 'PRODUCT must say Experimental'
+          }
+          if (-not (Test-Path installer/experimental-notice.txt)) {
+            throw 'installer/experimental-notice.txt is missing — the installer notice page has no content'
+          }
+          if ((Get-Content src/GrumpyGit.App/GrumpyGit.App.csproj -Raw) -notmatch '(?i)<Product>[^<]*experimental') {
+            throw 'GrumpyGit.App.csproj <Product> must say Experimental — the window title reads it'
+          }
+          Write-Host 'OK: labelled experimental in the product name, the exe metadata and the installer'
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Grumpy-${{ steps.version.outputs.version }}-win-x64-setup
+          name: ${{ env.SLUG }}-${{ steps.build.outputs.version }}-win-x64-setup
           path: dist/*.exe
           if-no-files-found: error
 
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Grumpy-${{ steps.version.outputs.version }}-win-x64-portable
+          name: ${{ env.SLUG }}-${{ steps.build.outputs.version }}-win-x64-portable
           path: dist/*-portable.zip
           if-no-files-found: error
 
@@ -265,15 +347,76 @@ jobs:
       - name: Upload winget manifests artifact
         uses: actions/upload-artifact@v4
         with:
-          name: winget-manifests-${{ steps.version.outputs.version }}
+          name: winget-manifests-${{ env.SLUG }}-${{ steps.build.outputs.version }}
           path: dist/winget/*.yaml
           if-no-files-found: error
 
+      # Notes are generated against the previous ai-v tag, not simply the previous
+      # release. GitHub's own "generate release notes" walks back to whatever came
+      # last regardless of prefix, so without this a Grumpy AI release would be
+      # described by the diff against a Grumpy tag — every merge from master listed
+      # as if it were new work here.
+      - name: Generate release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag  = $env:GITHUB_REF -replace '^refs/tags/', ''
+          $repo = "https://github.com/$env:GITHUB_REPOSITORY"
+
+          # Release order, not version order — the chain is what actually shipped,
+          # in the order it shipped. The [0-9] keeps stray non-version tags out.
+          $chain = @(git tag --list 'ai-v[0-9]*' --sort=-creatordate)
+          $index = [Array]::IndexOf($chain, $tag)
+          $previous = if ($index -ge 0 -and $index + 1 -lt $chain.Count) { $chain[$index + 1] } else { $null }
+
+          $request = @{ tag_name = $tag }
+          if ($previous) {
+            $request.previous_tag_name = $previous
+            Write-Host "Notes for $tag since $previous"
+          } else {
+            Write-Host "$tag is the first release in the ai-v chain"
+          }
+
+          $generated = ($request | ConvertTo-Json -Compress) |
+            gh api "repos/$env:GITHUB_REPOSITORY/releases/generate-notes" --input - |
+            ConvertFrom-Json
+
+          # Every release opens by saying which product it is and linking the other,
+          # because the one mistake that actually costs a user something is
+          # downloading an experimental model runtime they never wanted.
+          $banner = @(
+            '> ### ⚠️ This is **Grumpy AI** — experimental, and a different product from Grumpy'
+            '>'
+            '> **Experimental.** The local model''s review is a suggestion, not a verdict: it will'
+            '> miss real bugs and flag things that are fine. Read the diff yourself. Behaviour,'
+            '> settings and the model catalogue may change between releases.'
+            '>'
+            '> Separate release chain, separate installer, separate install folder. It carries a'
+            '> local model runtime and is a much larger download. Installing it will **not**'
+            '> upgrade or replace an existing Grumpy, and Grumpy will never turn into this.'
+            '> Every git operation is unchanged — that part is the same client.'
+            '>'
+            "> Want the stable git client, with no AI in it? **[Grumpy]($repo/releases/latest)**."
+          )
+
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          (($banner -join "`n") + "`n`n" + $generated.body) |
+            Set-Content dist/release-notes.md -Encoding utf8
+
+      # make_latest is false: GitHub has exactly one "latest" release per repository,
+      # and /releases/latest is where the README and the badge point for Grumpy.
+      # Without this, shipping Grumpy AI would quietly redirect everyone downloading
+      # Grumpy to a much larger, experimental product.
       - name: Attach installer and portable zip to release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ env.PRODUCT }} ${{ steps.build.outputs.version }}
+          make_latest: 'false'
+          body_path: dist/release-notes.md
           files: |
             dist/*.exe
             dist/*-portable.zip
-          generate_release_notes: true

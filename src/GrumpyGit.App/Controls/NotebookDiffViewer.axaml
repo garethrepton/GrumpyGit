@@ -1,0 +1,180 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GrumpyGit.App.ViewModels"
+             x:Class="GrumpyGit.App.Controls.NotebookDiffViewer"
+             x:DataType="vm:MainWindowViewModel">
+
+    <UserControl.Styles>
+        <!-- Type is set here rather than taken from the global tokens, and deliberately
+             larger than them. Those sizes are tuned for density — a whole file's diff in
+             one pane — and this view is the opposite: a handful of changed lines with prose
+             above them, read rather than scanned. Line height matters as much as size; at
+             the editor's leading, stacked short blocks read as one grey mass. -->
+
+        <!-- One monospace grid for every line, so markers, numbers and code share a
+             baseline across cells the way they would in a single document. -->
+        <Style Selector="TextBlock.code">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFontFamily}"/>
+            <Setter Property="FontSize" Value="14.5"/>
+            <Setter Property="LineHeight" Value="23"/>
+            <Setter Property="TextWrapping" Value="NoWrap"/>
+        </Style>
+        <Style Selector="SelectableTextBlock.code">
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFontFamily}"/>
+            <Setter Property="FontSize" Value="14.5"/>
+            <Setter Property="LineHeight" Value="23"/>
+            <Setter Property="TextWrapping" Value="NoWrap"/>
+        </Style>
+
+        <!-- The description. Full-strength foreground, not the dimmed secondary: it is the
+             reason the section exists, so it should not be quieter than the code under it. -->
+        <Style Selector="TextBlock.note">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="LineHeight" Value="23"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="MaxWidth" Value="900"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+
+        <!-- Nothing to say still needs saying, but not at the same weight. -->
+        <Style Selector="TextBlock.note.absent">
+            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}"/>
+            <Setter Property="FontStyle" Value="Italic"/>
+        </Style>
+
+        <Style Selector="TextBlock.issue">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="LineHeight" Value="21"/>
+            <Setter Property="Foreground" Value="{DynamicResource WarnFgBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="MaxWidth" Value="900"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+
+        <!-- Backgrounds match the editor's, so switching modes does not relearn colour. -->
+        <Style Selector="Border.line.added">
+            <Setter Property="Background" Value="{DynamicResource DiffAddLineBrush}"/>
+        </Style>
+        <Style Selector="Border.line.removed">
+            <Setter Property="Background" Value="{DynamicResource DiffDelLineBrush}"/>
+        </Style>
+        <Style Selector="Border.line.flagged">
+            <Setter Property="BorderBrush" Value="{DynamicResource WarnFgBrush}"/>
+            <Setter Property="BorderThickness" Value="2,0,0,0"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- The model takes tens of seconds a file on a CPU, and every section reads
+             "reading…" while it does. Without a moving indicator that is indistinguishable
+             from a view that has simply stopped. -->
+        <Border Grid.Row="0"
+                Padding="14,8"
+                IsVisible="{Binding IsDiffReviewRunning}"
+                Background="{DynamicResource BgSurfaceBrush}">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Reading this file — sections fill in as the model answers."
+                           Classes="caption"/>
+                <ProgressBar IsIndeterminate="True" Height="2" Minimum="0" Maximum="1"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Empty state. The notebook is a layout as much as a review, so it says which
+             of the two is missing rather than showing an unexplained blank. -->
+        <TextBlock Grid.Row="1"
+                   Classes="caption tertiary"
+                   Margin="14,10"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding !HasNotebookCells}"
+                   Text="No changes to show. Select a file with changes; if a local model is loaded, its reading of each one appears above it here."/>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding NotebookCells}" Margin="10,6,10,20">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:NotebookCellViewModel">
+                        <Border Margin="0,0,0,14"
+                                CornerRadius="4"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                BorderThickness="1">
+                            <StackPanel>
+
+                                <!-- Prose cell. -->
+                                <Border Padding="12,9"
+                                        Background="{DynamicResource BgSurfaceBrush}"
+                                        CornerRadius="4,4,0,0">
+                                    <StackPanel Spacing="6">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding Title}"
+                                                       Classes="strip-label"
+                                                       VerticalAlignment="Center"/>
+
+                                            <!-- What this change reaches outside itself.
+                                                 The reason to stop at this section rather
+                                                 than skim it. -->
+                                            <Border Classes="badge"
+                                                    Classes.danger="{Binding IsSevereConcern}"
+                                                    IsVisible="{Binding HasConcern}"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding ConcernLabel}"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding ConcernDetail}"
+                                                       FontSize="13"
+                                                       Foreground="{DynamicResource WarnFgBrush}"
+                                                       IsVisible="{Binding HasConcernDetail}"
+                                                       VerticalAlignment="Center"/>
+
+                                            <TextBlock Text="{Binding ChurnLabel}"
+                                                       Classes="caption tertiary"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding HeaderLine}"
+                                                       Classes="caption tertiary"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+
+                                        <TextBlock Text="{Binding NoteOrPlaceholder}"
+                                                   Classes="note"
+                                                   Classes.absent="{Binding !HasNote}"/>
+
+                                        <TextBlock Text="{Binding IssueText}"
+                                                   Classes="issue"
+                                                   IsVisible="{Binding HasIssues}"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Code cell. -->
+                                <ItemsControl ItemsSource="{Binding Lines}" Margin="0,2,0,4">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:NotebookLineViewModel">
+                                            <Border Classes="line"
+                                                    Classes.added="{Binding IsAdded}"
+                                                    Classes.removed="{Binding IsRemoved}"
+                                                    Classes.flagged="{Binding IsFlagged}"
+                                                    Padding="10,1,8,1">
+                                                <Grid ColumnDefinitions="56,18,*">
+                                                    <TextBlock Grid.Column="0"
+                                                               Classes="code tertiary"
+                                                               TextAlignment="Right"
+                                                               Text="{Binding Number}"/>
+                                                    <TextBlock Grid.Column="1"
+                                                               Classes="code tertiary"
+                                                               TextAlignment="Center"
+                                                               Text="{Binding Marker}"/>
+                                                    <SelectableTextBlock Grid.Column="2"
+                                                                         Classes="code"
+                                                                         Text="{Binding Content}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

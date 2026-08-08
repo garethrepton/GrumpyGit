@@ -1,21 +1,25 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
 #
+# Grumpy AI — a SEPARATE package from GarethRepton.GrumpyGit, not an upgrade of
+# it. Different identifier, different zip, different command alias, and it
+# installs alongside rather than over the standard edition.
+#
 # Portable install: winget downloads the release zip, extracts it, and puts a
-# `grumpy` shim on PATH. Nothing is written to Program Files and nothing needs
-# elevation - the same position the Inno installer takes.
+# `grumpy-ai` shim on PATH. Nothing is written to Program Files and nothing
+# needs elevation - the same position the Inno installer takes.
 #
 # The zip is NOT single-file, so `portable` alone will not do: the exe needs its
 # sibling files. `zip` + NestedInstallerType: portable is the combination that
 # keeps the folder intact and still yields a command alias.
-PackageIdentifier: GarethRepton.GrumpyGit
+PackageIdentifier: GarethRepton.GrumpyGit.AI
 PackageVersion: __VERSION__
 
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
   # Must match the zip's root folder, which the release workflow asserts.
-  - RelativeFilePath: Grumpy\Grumpy.exe
-    PortableCommandAlias: grumpy
+  - RelativeFilePath: GrumpyAI\Grumpy.exe
+    PortableCommandAlias: grumpy-ai
 
 # The app shells out to git.exe and is useless without it (README: git must be
 # on PATH). winget skips this if Git for Windows is already registered.
@@ -25,7 +29,7 @@ Dependencies:
 
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/garethrepton/GrumpyGit/releases/download/v__VERSION__/Grumpy-__VERSION__-win-x64-portable.zip
+    InstallerUrl: https://github.com/garethrepton/GrumpyGit/releases/download/ai-v__VERSION__/Grumpy-AI-__VERSION__-win-x64-portable.zip
     InstallerSha256: __SHA256__
 
 ReleaseDate: __RELEASE_DATE__

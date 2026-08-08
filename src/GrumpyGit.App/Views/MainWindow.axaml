@@ -2,14 +2,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:GrumpyGit.App.ViewModels"
         xmlns:controls="using:GrumpyGit.App.Controls"
+        xmlns:services="using:GrumpyGit.App.Services"
+        xmlns:model="using:GrumpyGit.Core.LocalModel"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         d:DesignWidth="1200" d:DesignHeight="700"
         x:Class="GrumpyGit.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/sheep.ico"
-        Title="Grumpy"
+        Icon="/Assets/sheep-ai.ico"
+        Title="{x:Static services:AppInfo.ProductName}"
         Background="{DynamicResource BgBaseBrush}"
         MinWidth="800"
         MinHeight="500">
@@ -1295,8 +1297,74 @@
                               IsVisible="{Binding IsChromeVisible}"
                               HorizontalAlignment="Stretch"/>
 
-                <!-- Bottom: Files + Diff side by side ────────────────────── -->
-                <Grid Grid.Row="2">
+                <!-- Bottom: overview strip, then Files + Diff side by side ── -->
+                <DockPanel Grid.Row="2">
+
+                    <!-- ── Change overview ──────────────────────────────────
+                         What this whole commit (or the working tree) appears to
+                         be about, and which files to read first. Spans the
+                         section because it describes the set, not the file you
+                         happen to have open. Absent until a model answers. -->
+                    <Border DockPanel.Dock="Top"
+                            Background="{DynamicResource BgSurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="12,7"
+                            IsVisible="{Binding HasChangeSetReview}">
+                        <StackPanel Spacing="5">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding ChangeSetHeader}" Classes="strip-label"/>
+                                <!-- No risk badge here, deliberately. This pass is given the
+                                     file list, the churn and the symbol names — never a line
+                                     of code — so a DANGER verdict from it is a guess from
+                                     shape wearing the same badge the per-file review earns
+                                     by reading. The file reviews below still show theirs. -->
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding ChangeSetSummary}"
+                                       FontSize="14"
+                                       LineHeight="21"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       TextWrapping="Wrap"/>
+
+                            <!-- Each line names a file and why to start there; clicking
+                                 opens it, so the advice is one step from being acted on. -->
+                            <ItemsControl ItemsSource="{Binding ChangeSetWatch}">
+                                <ItemsControl.ItemTemplate>
+                                    <!-- Typed rather than x:CompileBindings="False": an
+                                         uncompiled binding resolves "vm:" by name at
+                                         runtime, which it cannot do, so the first watch
+                                         line the model produced took the process down. -->
+                                    <DataTemplate x:DataType="model:WatchItem">
+                                        <Button Classes="subtle sm"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Padding="4,2"
+                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).OpenWatchedFileCommand}"
+                                                CommandParameter="{Binding}">
+                                            <!-- "Start here", not "something is wrong here".
+                                                 An alert glyph in warning colour made a
+                                                 reading order look like a list of faults. -->
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Path Classes="icon sm"
+                                                      Data="{DynamicResource IconFileDiff}"
+                                                      Fill="{DynamicResource TextTertiaryBrush}"/>
+                                                <TextBlock Text="{Binding Path}"
+                                                           Classes="mono"
+                                                           FontSize="13.5"/>
+                                                <TextBlock Text="{Binding Text}"
+                                                           FontSize="13.5"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <!-- Collapses to 0 in full-screen diff mode -->
                         <ColumnDefinition Width="{Binding FilesPanelWidth}"/>
@@ -1393,6 +1461,15 @@
                                     <Button Classes="sm"
                                             Content="Stage All"
                                             Command="{Binding StageAllCommand}"/>
+                                    <!-- The question you have with a finger over Commit:
+                                         is there anything in here I should not be
+                                         committing? Only offered with a model present. -->
+                                    <Button Classes="sm"
+                                            Content="Review all"
+                                            Command="{Binding RunAiScanCommand}"
+                                            IsVisible="{Binding CanRunAiScan}"
+                                            IsEnabled="{Binding !IsAiScanRunning}"
+                                            ToolTip.Tip="Read every changed file with the local model and rank them"/>
                                     <!-- Ticking this loads the last commit's message, so
                                          the box shows what is about to be replaced. -->
                                     <CheckBox Content="Amend"
@@ -1842,7 +1919,7 @@
                              Each strip gets its own row: they can be visible at the same
                              time, so sharing a row would overlap them. The diff itself is
                              the star row. -->
-                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
                             <Border Grid.Row="0" Classes="pane-header">
                                 <DockPanel>
                                     <StackPanel Orientation="Horizontal"
@@ -1930,6 +2007,12 @@
                                                       Classes="sm"
                                                       Content="Ghost"
                                                       ToolTip.Tip="One column: the new file, with removed lines left in place struck through"/>
+
+                                        <ToggleButton IsChecked="{Binding IsNotebookView, Mode=OneWay}"
+                                                      Command="{Binding ShowNotebookViewCommand}"
+                                                      Classes="sm"
+                                                      Content="AI"
+                                                      ToolTip.Tip="One section per hunk, each headed by the model's reading of it"/>
 
                                         <ToggleButton IsChecked="{Binding HighlightMovedBlocks, Mode=TwoWay}"
                                                       Classes="sm"
@@ -2100,11 +2183,170 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- ── Local model reading ──────────────────────────────────
+                                 The symbol summary says what changed; this says what it
+                                 appears to mean. Absent entirely until a model is
+                                 configured — an empty box explaining a feature you have
+                                 not set up is worse than no box. Height-capped for the
+                                 same reason as the summary below it. -->
+                            <Border Grid.Row="3"
+                                    Background="{DynamicResource BgSurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    MaxHeight="200"
+                                    IsVisible="{Binding IsReviewPanelVisible}">
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Top"
+                                                Orientation="Horizontal"
+                                                Spacing="8"
+                                                Margin="12,7,12,5">
+                                        <TextBlock Text="{Binding DiffReviewHeader}" Classes="strip-label"/>
+
+                                        <!-- The one thing worth interrupting for. Absent
+                                             entirely when the change is unremarkable, so
+                                             its presence is the signal. -->
+                                        <Border Classes="badge"
+                                                Classes.danger="{Binding DiffReviewRisk, Converter={x:Static controls:RiskIsDangerConverter.Instance}}"
+                                                IsVisible="{Binding HasDiffRisk}">
+                                            <TextBlock Text="{Binding DiffRiskLabel}"/>
+                                        </Border>
+
+                                        <!-- Always on, never conditional. The review reads
+                                             with the authority of the rest of the panel
+                                             around it, and it has not earned that — the
+                                             label is what keeps a suggestion from being
+                                             mistaken for a verdict. -->
+                                        <Border Classes="badge warn">
+                                            <TextBlock Text="EXPERIMENTAL"/>
+                                        </Border>
+
+                                        <TextBlock Text="a suggestion, not a verdict · local · nothing leaves this machine"
+                                                   Classes="caption tertiary"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- The offer. Shown only with no model configured, and
+                                         only until it is turned down once — this is the
+                                         one thing in the app that uses the network for
+                                         anything other than push/pull/fetch/clone, so it
+                                         says what it will do before it does it. -->
+                                    <StackPanel DockPanel.Dock="Top"
+                                                Margin="12,0,12,8"
+                                                Spacing="6"
+                                                IsVisible="{Binding ShowsModelOffer}">
+                                        <TextBlock Classes="caption"
+                                                   TextWrapping="Wrap"
+                                                   Text="No local model yet. Grumpy can download one and read every diff for you — entirely on this machine, with nothing sent anywhere afterwards."/>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <ComboBox ItemsSource="{Binding DownloadableModels}"
+                                                      SelectedItem="{Binding SelectedDownloadModel, Mode=TwoWay}"
+                                                      MinWidth="290">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:CompileBindings="False">
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <TextBlock Text="{Binding Name}"/>
+                                                            <TextBlock Text="{Binding SizeLabel}" Classes="tertiary"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                            <Button Classes="primary sm"
+                                                    Content="Download"
+                                                    Command="{Binding DownloadModelCommand}"/>
+                                            <Button Classes="subtle sm"
+                                                    Content="No thanks"
+                                                    Command="{Binding DeclineModelOfferCommand}"
+                                                    ToolTip.Tip="Hides this for good. Settings still has the option."/>
+                                        </StackPanel>
+                                        <TextBlock Classes="caption tertiary"
+                                                   TextWrapping="Wrap"
+                                                   Text="{Binding SelectedDownloadModel.Summary}"/>
+                                    </StackPanel>
+
+                                    <!-- Download in progress -->
+                                    <StackPanel DockPanel.Dock="Top"
+                                                Margin="12,0,12,8"
+                                                Spacing="6"
+                                                IsVisible="{Binding IsDownloadingModel}">
+                                        <TextBlock Text="{Binding ModelDownloadStatus}" Classes="caption"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <ProgressBar Minimum="0" Maximum="1"
+                                                         Value="{Binding ModelDownloadFraction}"
+                                                         Width="320"
+                                                         Height="6"
+                                                         VerticalAlignment="Center"/>
+                                            <Button Classes="subtle sm"
+                                                    Content="Cancel"
+                                                    Command="{Binding CancelModelDownloadCommand}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  IsVisible="{Binding IsDiffReviewVisible}">
+                                        <StackPanel Margin="12,0,12,8" Spacing="6">
+                                            <!-- Body size, not caption. This is the sentence
+                                                 the whole feature exists to produce; it was
+                                                 set smaller and dimmer than the metadata
+                                                 around it. -->
+                                            <TextBlock Text="{Binding DiffReviewText}"
+                                                       FontSize="14.5"
+                                                       LineHeight="22"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                                       MaxWidth="900"
+                                                       HorizontalAlignment="Left"
+                                                       TextWrapping="Wrap"/>
+
+                                            <!-- What the summary above was made from. A
+                                                 confident sentence about a file the model
+                                                 only saw a third of reads exactly like one
+                                                 about a file it read whole. -->
+                                            <TextBlock Text="{Binding DiffReviewDetail}"
+                                                       FontSize="12.5"
+                                                       Foreground="{DynamicResource TextTertiaryBrush}"
+                                                       TextWrapping="Wrap"
+                                                       IsVisible="{Binding HasDiffReviewDetail}"/>
+
+                                            <!-- Each issue jumps to the line it names, the
+                                                 same gesture as the symbol list above. -->
+                                            <ItemsControl ItemsSource="{Binding DiffReviewIssues}"
+                                                          IsVisible="{Binding HasDiffReviewIssues}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:ReviewIssueViewModel">
+                                                        <Button Classes="subtle sm"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Left"
+                                                                Padding="4,2"
+                                                                IsEnabled="{Binding CanNavigate}"
+                                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).GoToIssueCommand}"
+                                                                CommandParameter="{Binding}">
+                                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                <Path Classes="icon sm"
+                                                                      Data="{DynamicResource IconAlert}"
+                                                                      Fill="{DynamicResource WarnFgBrush}"/>
+                                                                <TextBlock Text="{Binding LineLabel}"
+                                                                           Classes="mono tertiary"
+                                                                           FontSize="13"
+                                                                           MinWidth="34"/>
+                                                                <TextBlock Text="{Binding Text}"
+                                                                           FontSize="13.5"
+                                                                           LineHeight="20"
+                                                                           TextWrapping="Wrap"/>
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </Border>
+
                             <!-- ── Semantic change summary ──────────────────────────────
                                  What changed, by symbol, before you read a single line of
                                  the diff. Capped in height and horizontally scrolling so a
                                  large refactor cannot push the diff itself off screen. -->
-                            <Border Grid.Row="3"
+                            <Border Grid.Row="4"
                                     Background="{DynamicResource BgSurfaceBrush}"
                                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                                     BorderThickness="0,0,0,1"
@@ -2120,6 +2362,17 @@
                                                    Classes="caption"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
+
+                                    <!-- What this file's diff did, computed from the diff
+                                         itself. No model, no configuration — every file
+                                         gets one, which is why it sits above the symbol
+                                         list rather than inside the review panel. -->
+                                    <TextBlock DockPanel.Dock="Top"
+                                               Text="{Binding FileChangeDescription}"
+                                               Classes="caption"
+                                               Margin="12,0,12,6"
+                                               TextWrapping="Wrap"
+                                               IsVisible="{Binding HasFileChangeDescription}"/>
 
                                     <!-- Two distinct empty states. Saying "no language
                                          driver" when nothing is selected blames the file
@@ -2180,7 +2433,7 @@
                             </Border>
 
                             <!-- Diff view (default) -->
-                            <controls:DiffViewer Grid.Row="4"
+                            <controls:DiffViewer Grid.Row="5"
                                                  x:Name="DiffViewerControl"
                                                  Diff="{Binding CurrentDiff}"
                                                  FilePath="{Binding DiffFilePath}"
@@ -2190,16 +2443,24 @@
                                                  CollapseUnchanged="{Binding ShouldCollapseUnchanged}"
                                                  ViewMode="{Binding DiffViewMode}"
                                                  HighlightMoved="{Binding HighlightMovedBlocks}"
-                                                 IsVisible="{Binding IsTextDiffVisible}"/>
+                                                 ChangeNotes="{Binding DiffChangeNotes}"
+                                                 WarningLines="{Binding DiffWarningLines}"
+                                                 IsVisible="{Binding IsEditorDiffVisible}"/>
+
+                            <!-- The AI reading, as sections. Its own control rather than a
+                                 third rendering inside the editor: a notebook is N blocks
+                                 with prose between them, which one document cannot be. -->
+                            <controls:NotebookDiffViewer Grid.Row="5"
+                                                         IsVisible="{Binding IsNotebookDiffVisible}"/>
 
                             <!-- Image preview replaces the text diff for picture files -->
-                            <controls:ImageDiffViewer Grid.Row="4"
+                            <controls:ImageDiffViewer Grid.Row="5"
                                                       DataContext="{Binding ImageDiff}"
                                                       IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).IsImageDiff}"/>
 
                             <!-- Blame view (alternative) -->
                             <controls:BlameViewer x:Name="BlameViewerControl"
-                                                  Grid.Row="4"
+                                                  Grid.Row="5"
                                                   BlameData="{Binding BlameData}"
                                                   FilePath="{Binding BlameFilePath}"
                                                   IsVisible="{Binding IsBlameVisible}"/>
@@ -2219,6 +2480,7 @@
                         </Grid>
                     </Border>
                 </Grid>
+                </DockPanel>
 
                 <!-- File History overlay panel ─────────────────────────── -->
                 <Border Grid.Row="0" Grid.RowSpan="3"
@@ -2450,6 +2712,125 @@
                             VerticalAlignment="Top"
                             Margin="0,8,16,0"
                             IsHitTestVisible="True"/>
+
+        <!-- ── AI view ────────────────────────────────────────────────────────
+             Every file in whatever is selected — working changes, a commit, or a
+             pull request preview — read by the local model and listed worst
+             first. Rows are listed up front and fill in as their turn comes: a
+             list that appeared all at once after a minute would look like
+             nothing was happening. Ordering happens once, at the end, so rows do
+             not jump around under the reader. -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="95"
+                Classes="scrim"
+                IsVisible="{Binding IsAiScanVisible}">
+            <Border Classes="card"
+                    Padding="{DynamicResource PadDialog}"
+                    MaxWidth="960"
+                    MaxHeight="720"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <DockPanel LastChildFill="True">
+
+                    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,12">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="AI REVIEW" Classes="strip-label"
+                                       VerticalAlignment="Center"/>
+                            <Border Classes="badge"
+                                    Classes.danger="{Binding AiScanRisk, Converter={x:Static controls:RiskIsDangerConverter.Instance}}"
+                                    IsVisible="{Binding AiScanHasRisk}">
+                                <TextBlock Text="{Binding AiScanRiskLabel}"/>
+                            </Border>
+                            <TextBlock Text="{Binding AiScanScopeLabel}"
+                                       Classes="caption tertiary"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding AiScanTally}"
+                                   Classes="caption tertiary"/>
+
+                        <!-- Written after every file has been read, from what those
+                             readings actually said. -->
+                        <TextBlock Text="{Binding AiScanOverview}"
+                                   Classes="secondary"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding HasAiScanOverview}"/>
+
+                        <TextBlock Text="{Binding AiScanStatus}"
+                                   Classes="caption"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Bottom"
+                                Orientation="Horizontal"
+                                Spacing="10"
+                                HorizontalAlignment="Right"
+                                Margin="0,12,0,0">
+                        <Button Classes="subtle"
+                                Content="Stop"
+                                Command="{Binding CancelAiScanCommand}"
+                                IsVisible="{Binding IsAiScanRunning}"/>
+                        <Button Classes="subtle"
+                                Content="Scan again"
+                                Command="{Binding RunAiScanCommand}"
+                                IsVisible="{Binding !IsAiScanRunning}"/>
+                        <Button Content="Close"
+                                Command="{Binding CloseAiScanCommand}"/>
+                    </StackPanel>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding AiScanFiles}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:FileReviewViewModel">
+                                    <!-- The whole row opens the diff: the point of a scan
+                                         is to send you to a file. -->
+                                    <Button Classes="row"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left"
+                                            Padding="0,7"
+                                            Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).OpenScannedFileCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Border BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                                BorderThickness="0,0,0,1"
+                                                Padding="0,0,0,7">
+                                            <StackPanel Spacing="3">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Border Classes="badge"
+                                                            Classes.danger="{Binding IsDanger}"
+                                                            IsVisible="{Binding HasRisk}">
+                                                        <TextBlock Text="{Binding RiskLabel}"/>
+                                                    </Border>
+                                                    <TextBlock Text="{Binding Path}" Classes="mono"/>
+                                                    <TextBlock Text="{Binding ChurnLabel}"
+                                                               Classes="caption tertiary"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding IssueLabel}"
+                                                               Classes="caption"
+                                                               Foreground="{DynamicResource WarnFgBrush}"
+                                                               IsVisible="{Binding HasIssues}"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding StatusLabel}"
+                                                               Classes="caption tertiary"
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Summary}"
+                                                           Classes="caption"
+                                                           TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding IssueDetail}"
+                                                           Classes="caption"
+                                                           Foreground="{DynamicResource WarnFgBrush}"
+                                                           TextWrapping="Wrap"
+                                                           IsVisible="{Binding HasIssues}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Border>
 
         <!-- ── Confirmation dialog overlay ───────────────────────────────── -->
         <Border Grid.Row="0" Grid.RowSpan="6"

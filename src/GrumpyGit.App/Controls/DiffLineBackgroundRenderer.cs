@@ -14,6 +14,7 @@ namespace GrumpyGit.App.Controls;
 ///   • removed lines with a red tint, added lines with a green tint
 ///   • within paired changed lines, a brighter highlight on just the changed characters
 ///   • hunk/file header lines with a muted blue tint
+///   • lines the local model flagged as a problem, with a warning wash over the top
 /// </summary>
 internal sealed class DiffLineBackgroundRenderer : IBackgroundRenderer
 {
@@ -22,6 +23,8 @@ internal sealed class DiffLineBackgroundRenderer : IBackgroundRenderer
     private readonly IBrush _inlineBrush;
     private readonly HashSet<int> _hunkLines;
     private readonly IBrush _hunkBrush;
+    private readonly HashSet<int> _warningLines;
+    private readonly IBrush _warningBrush;
 
     // Inline ranges keyed by 1-based line number for fast lookup during Draw
     private readonly Dictionary<int, List<DiffInlineRange>> _inlineByLine;
@@ -34,13 +37,17 @@ internal sealed class DiffLineBackgroundRenderer : IBackgroundRenderer
         IBrush inlineBrush,
         IReadOnlyList<int> hunkLines,
         IBrush hunkBrush,
-        IReadOnlyList<DiffInlineRange> inlineRanges)
+        IReadOnlyList<DiffInlineRange> inlineRanges,
+        IReadOnlyList<int>? warningLines = null,
+        IBrush? warningBrush = null)
     {
-        _coloredLines = new HashSet<int>(coloredLines);
-        _colorBrush   = colorBrush;
-        _inlineBrush  = inlineBrush;
-        _hunkLines    = new HashSet<int>(hunkLines);
-        _hunkBrush    = hunkBrush;
+        _coloredLines  = new HashSet<int>(coloredLines);
+        _colorBrush    = colorBrush;
+        _inlineBrush   = inlineBrush;
+        _hunkLines     = new HashSet<int>(hunkLines);
+        _hunkBrush     = hunkBrush;
+        _warningLines  = warningLines is null ? [] : new HashSet<int>(warningLines);
+        _warningBrush  = warningBrush ?? Brushes.Transparent;
 
         _inlineByLine = inlineRanges
             .GroupBy(r => r.Line)
@@ -69,6 +76,21 @@ internal sealed class DiffLineBackgroundRenderer : IBackgroundRenderer
                                - textView.ScrollOffset.Y;
                     drawingContext.FillRectangle(
                         brush,
+                        new Rect(0, yPos, textView.Bounds.Width, textLine.Height));
+                }
+            }
+
+            // Warning wash goes on top of whatever the line already had. Painted over
+            // rather than instead of the add/remove tint, so a flagged line still reads as
+            // an addition — losing that would be trading one signal for another.
+            if (_warningLines.Contains(lineNum))
+            {
+                foreach (var textLine in visualLine.TextLines)
+                {
+                    var yPos = visualLine.GetTextLineVisualYPosition(textLine, VisualYPosition.TextTop)
+                               - textView.ScrollOffset.Y;
+                    drawingContext.FillRectangle(
+                        _warningBrush,
                         new Rect(0, yPos, textView.Bounds.Width, textLine.Height));
                 }
             }

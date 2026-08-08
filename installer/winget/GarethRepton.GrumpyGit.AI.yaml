@@ -2,7 +2,7 @@
 #
 # Template. The release workflow substitutes __VERSION__ / __SHA256__ /
 # __RELEASE_DATE__ and writes the rendered manifests to dist/winget/.
-PackageIdentifier: GarethRepton.GrumpyGit
+PackageIdentifier: GarethRepton.GrumpyGit.AI
 PackageVersion: __VERSION__
 DefaultLocale: en-US
 ManifestType: version

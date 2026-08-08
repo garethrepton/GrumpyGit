@@ -17,6 +17,7 @@ using AvaloniaEdit.Rendering;
 using AvaloniaEdit.TextMate;
 using GrumpyGit.App.ViewModels;
 using GrumpyGit.Core.Git;
+using GrumpyGit.Core.LocalModel;
 using GrumpyGit.Core.Models;
 using TextMateSharp.Grammars;
 
@@ -37,6 +38,29 @@ public partial class DiffViewer : UserControl
 
     public static readonly StyledProperty<bool> IsWorkingTreeProperty =
         AvaloniaProperty.Register<DiffViewer, bool>(nameof(IsWorkingTree));
+
+    /// <summary>
+    /// One line per hunk from the local model, drawn as a callout above each section.
+    /// Empty when no model is configured, which is also when nothing is drawn.
+    /// </summary>
+    public static readonly StyledProperty<IReadOnlyList<ChangeNote>?> ChangeNotesProperty =
+        AvaloniaProperty.Register<DiffViewer, IReadOnlyList<ChangeNote>?>(nameof(ChangeNotes));
+
+    public IReadOnlyList<ChangeNote>? ChangeNotes
+    {
+        get => GetValue(ChangeNotesProperty);
+        set => SetValue(ChangeNotesProperty, value);
+    }
+
+    /// <summary>Rendered line numbers the model flagged, washed with a warning tint.</summary>
+    public static readonly StyledProperty<IReadOnlyList<int>?> WarningLinesProperty =
+        AvaloniaProperty.Register<DiffViewer, IReadOnlyList<int>?>(nameof(WarningLines));
+
+    public IReadOnlyList<int>? WarningLines
+    {
+        get => GetValue(WarningLinesProperty);
+        set => SetValue(WarningLinesProperty, value);
+    }
 
     /// <summary>
     /// False when the active diff options produce a patch that cannot be applied,
@@ -138,6 +162,7 @@ public partial class DiffViewer : UserControl
     private ScrollViewer? _rightScrollViewer;
     private bool _syncingScroll;
     private readonly List<Button> _hunkButtons = new();
+    private readonly List<Border> _hunkNotes = new();
     private FoldingManager? _leftFolding;
     private FoldingManager? _rightFolding;
 
@@ -378,6 +403,18 @@ public partial class DiffViewer : UserControl
         {
             PositionHunkButtons();
         }
+
+        if (change.Property == ChangeNotesProperty)
+        {
+            PositionChangeNotes();
+        }
+
+        // The review arrives seconds after the diff, so the warning wash has to be able to
+        // repaint an already-rendered document rather than only being set up with it.
+        if (change.Property == WarningLinesProperty)
+        {
+            ApplyBackgroundRenderers();
+        }
     }
 
     // ── Scroll synchronisation ────────────────────────────────────────────────
@@ -388,7 +425,7 @@ public partial class DiffViewer : UserControl
         _syncingScroll = true;
         _rightScrollViewer.Offset = _rightScrollViewer.Offset.WithY(_leftScrollViewer!.Offset.Y);
         _syncingScroll = false;
-        PositionHunkButtons();
+        PositionOverlays();
     }
 
     private void OnRightScrollChanged(object? sender, ScrollChangedEventArgs e)
@@ -403,7 +440,7 @@ public partial class DiffViewer : UserControl
         // Hunk buttons are positioned against the left editor, which has just been
         // scrolled to match. Without this they strand in place when the user scrolls
         // using the right-hand editor.
-        PositionHunkButtons();
+        PositionOverlays();
     }
 
     // ── Diff application ──────────────────────────────────────────────────────
@@ -456,11 +493,10 @@ public partial class DiffViewer : UserControl
         LeftEditor.Document = new TextDocument(diff.LeftText);
         RightEditor.Document = new TextDocument(diff.RightText);
 
-        SetBackgroundRenderer(LeftEditor,  diff.LeftColoredLines,  diff.HunkHeaderLines, diff.LeftInlineRanges,  isLeft: true);
-        SetBackgroundRenderer(RightEditor, diff.RightColoredLines, diff.HunkHeaderLines, diff.RightInlineRanges, isLeft: false);
+        ApplyBackgroundRenderers();
 
-        // Position hunk buttons after layout
-        Dispatcher.UIThread.Post(PositionHunkButtons, DispatcherPriority.Render);
+        // Position the floating layers after layout
+        Dispatcher.UIThread.Post(PositionOverlays, DispatcherPriority.Render);
     }
 
     // ── Alternative presentations ─────────────────────────────────────────────
@@ -628,12 +664,27 @@ public partial class DiffViewer : UserControl
             new MovedBlockBackgroundRenderer(toLines, brush));
     }
 
+    /// <summary>
+    /// (Re)builds both editors' diff shading. Separate from the document build because the
+    /// model's warnings land later than the diff does.
+    /// </summary>
+    private void ApplyBackgroundRenderers()
+    {
+        var diff = Diff;
+        if (diff is null) return;
+
+        var warnings = WarningLines;
+        SetBackgroundRenderer(LeftEditor, diff.LeftColoredLines, diff.HunkHeaderLines, diff.LeftInlineRanges, isLeft: true, warnings);
+        SetBackgroundRenderer(RightEditor, diff.RightColoredLines, diff.HunkHeaderLines, diff.RightInlineRanges, isLeft: false, warnings);
+    }
+
     private static void SetBackgroundRenderer(
         TextEditor editor,
         IReadOnlyList<int> coloredLines,
         IReadOnlyList<int> hunkLines,
         IReadOnlyList<DiffInlineRange> inlineRanges,
-        bool isLeft)
+        bool isLeft,
+        IReadOnlyList<int>? warningLines = null)
     {
         var renderers = editor.TextArea.TextView.BackgroundRenderers;
 
@@ -651,11 +702,28 @@ public partial class DiffViewer : UserControl
 
         var hunkBrush = ThemeTokens.Brush("DiffHunkLineBrush", Brushes.Transparent);
 
+        var warningBrush = ThemeTokens.Brush("WarnBgBrush", Brushes.Transparent);
+
         renderers.Add(new DiffLineBackgroundRenderer(
-            coloredLines, colorBrush, inlineBrush, hunkLines, hunkBrush, inlineRanges));
+            coloredLines, colorBrush, inlineBrush, hunkLines, hunkBrush, inlineRanges,
+            warningLines, warningBrush));
+
+        // The renderer list changed under an already-laid-out document, so nothing would
+        // repaint on its own until the next scroll.
+        editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
     }
 
     // ── Hunk button overlay ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Both floating layers at once. Neither reserves space in the document, so both have
+    /// to be re-placed whenever the view scrolls or re-lays out.
+    /// </summary>
+    private void PositionOverlays()
+    {
+        PositionHunkButtons();
+        PositionChangeNotes();
+    }
 
     private void ClearHunkButtons()
     {
@@ -736,6 +804,99 @@ public partial class DiffViewer : UserControl
             }
         }
     }
+
+    // ── Hunk note callouts ───────────────────────────────────────────────────
+
+    private void ClearChangeNotes()
+    {
+        foreach (var note in _hunkNotes)
+            ChangeNoteCanvas.Children.Remove(note);
+        _hunkNotes.Clear();
+    }
+
+    /// <summary>
+    /// Floats the model's line about each hunk over that hunk's header on the new side.
+    ///
+    /// Same technique as the stage buttons: no space is reserved in the document, so the
+    /// callouts cannot shift line numbers or invalidate an anchor anything else computed.
+    /// The cost is that they must be repositioned on every scroll and layout pass, which
+    /// is what the shared call in PositionOverlays does.
+    /// </summary>
+    private void PositionChangeNotes()
+    {
+        ClearChangeNotes();
+
+        var notes = ChangeNotes;
+        if (notes is null || notes.Count == 0) return;
+        if (!SideBySideRoot.IsVisible) return;
+
+        var textView = RightEditor.TextArea.TextView;
+        var document = RightEditor.Document;
+        if (document is null) return;
+
+        // Reading VisualLines throws when a layout pass is in flight — see the same guard
+        // on the stage buttons.
+        try
+        {
+            if (textView.VisualLines.Count == 0) return;
+        }
+        catch (VisualLinesInvalidException)
+        {
+            return;
+        }
+
+        foreach (var note in notes)
+        {
+            var lineNumber = note.RenderedLine;
+            if (lineNumber < 1 || lineNumber > document.LineCount)
+                continue;
+
+            try
+            {
+                var visualPos = textView.GetVisualPosition(
+                    new AvaloniaEdit.TextViewPosition(lineNumber, 0),
+                    AvaloniaEdit.Rendering.VisualYPosition.TextTop);
+
+                var y = visualPos.Y - textView.ScrollOffset.Y;
+                if (y < -30 || y > textView.Bounds.Height + 30)
+                    continue;
+
+                var callout = CreateChangeNote(note.Text);
+                Canvas.SetLeft(callout, 46);
+                Canvas.SetTop(callout, y);
+                ChangeNoteCanvas.Children.Add(callout);
+                _hunkNotes.Add(callout);
+            }
+            catch
+            {
+                // Line not currently visible, or layout not ready.
+            }
+        }
+    }
+
+    /// <summary>
+    /// A quiet chip, not a banner. It sits on the hunk header row — a line that carries no
+    /// code — so it can be read without obscuring anything, and it is deliberately dimmer
+    /// than the code beneath it: this is a machine's opinion, not the diff.
+    /// </summary>
+    private static Border CreateChangeNote(string text) =>
+        new()
+        {
+            Background = ThemeTokens.Brush("BgSurfaceBrush", Brushes.Transparent),
+            BorderBrush = ThemeTokens.Brush("BorderSubtleBrush", Brushes.Transparent),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(6, 1, 6, 1),
+            Opacity = 0.94,
+            MaxWidth = 620,
+            Child = new TextBlock
+            {
+                Text = text,
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Foreground = ThemeTokens.Brush("TextSecondaryBrush", Brushes.Gray),
+            },
+        };
 
     private static Button CreateHunkButton(DiffHunkViewModel hunkVm)
     {

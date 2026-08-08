@@ -23,9 +23,15 @@ These govern all work in this repo. They are not preferences — a change that b
 decision to raise, not to make quietly.
 
 1. **Thou shalt not call out unless it has explicitly been agreed.** The agreed outbound surface is
-   exactly one thing: `git.exe` push, pull, fetch and clone, credentials handled by Git Credential
-   Manager. (Fetch and clone were added on 2026-08-07, on request — see
-   `Scans/2026-08-07-repo-operations.html`.) Nothing
+   exactly two things: `git.exe` push, pull, fetch and clone, credentials handled by Git Credential
+   Manager; and **one user-pressed model download** from the hard-coded `ModelCatalogue`, all on
+   one host, every entry published by the model's own vendor and verified against a published
+   SHA-256. (Fetch and clone were added on
+   2026-08-07, on request — `Scans/2026-08-07-repo-operations.html`; the model download the same
+   day — `Scans/2026-08-07-model-download.html`; the catalogue grew from five entries to nine, and
+   then to twelve with the Gemma 4 additions, on 2026-08-08, on request —
+   `Scans/2026-08-08-model-library.html`. Every entry is on huggingface.co under the model
+   vendor's own organisation.) Nothing
    else — no API client, no telemetry, no update check, no analytics, no third party endpoint —
    gets added on your own initiative, however convenient. Ask, get a yes, then write it. Silence is
    a no. Run `network-audit` after any change that could have added one. A GitHub API client via
@@ -82,6 +88,7 @@ decision to raise, not to make quietly.
 | Code editor / diff viewer | AvaloniaEdit + TextMate grammars | `Avalonia.AvaloniaEdit`, `AvaloniaEdit.TextMate`, `TextMateSharp.Grammars` |
 | Commit graph rendering | Custom Avalonia `DrawingContext` (pvigier lane-assignment algorithm) | — |
 | MVVM | CommunityToolkit.Mvvm | `CommunityToolkit.Mvvm` |
+| Local diff review (optional) | llama.cpp in-process, GGUF supplied by the user — no weights shipped, none downloaded | `LLamaSharp`, `LLamaSharp.Backend.Cpu` |
 
 ### Key Architecture Decisions
 
@@ -90,6 +97,32 @@ decision to raise, not to make quietly.
 **Git Credential Manager:** Ships with Git for Windows and intercepts credential requests for push, pull, fetch and clone automatically. There is no authentication, token or credential code in this app at all — that is the point, and it is the position to defend.
 
 **No hosting-provider API:** This is a git client, not a GitHub client. Pull requests, issues and code review live in the browser, where they are better. The Octokit integration that once did this was removed in favour of the browser; see `Scans/2026-08-02-github-removal.html`.
+
+**Two products, two release chains:** `master` ships **Grumpy** (no model runtime); `LocalAi` ships
+**Grumpy AI (Experimental)** (the same client plus llama.cpp in-process). **The AI edition is
+labelled experimental everywhere the user meets it** — window title, exe properties, Start menu,
+Apps & features, an installer page they click past, a badge on the review panel and in settings, the
+winget package name, the README and every release note. The release job fails if that label goes
+missing from the product name, the csproj or the installer. Do not quietly drop it: the review is a
+suggestion and says so, and the day it stops being experimental is a decision to raise. They are separate products, not two builds
+of one — separate Inno `AppId`, install directory, Start-menu name, setup filename, winget identifier
+and tag chain (`v1.2.3` / `ai-v1.2.3`, versioned independently), so installing one never touches the
+other and `releases/latest` always means Grumpy. **Plenty of users want a git client and no language
+model anywhere near it; that is a supported position, not an oversight.** The release job proves it
+rather than asserting it: a standard build whose published output contains any llama/ggml/gguf file
+fails, as does an AI build carrying weights or a tag whose prefix disagrees with the tree.
+
+**The build is branch-owned, not parameterised.** `installer/Grumpy.iss`, `.github/workflows/`
+and `installer/winget/` each build one product — the branch's own — with no edition switch, no
+`/DEdition` flag and no tag-prefix dispatch. Those files conflict on every merge between the two
+branches; resolve by keeping the branch's own copy. Do not "fix" that by reintroducing a switch:
+one branch, one product, one script was the decision. Product identity lives in `<Product>` /
+`<AssemblyTitle>` / `<ApplicationIcon>` in `GrumpyGit.App.csproj` and the window `Icon` in
+`MainWindow.axaml`; everything user-visible derives from those, so never write the name again
+anywhere else. The AI icon is the sheep with an accent "AI" badge, generated from `sheep.ico` by
+`tools/generate-ai-icon.ps1` rather than drawn separately, so the two stay one family — regenerate
+it, do not hand-edit it. `%LOCALAPPDATA%\Grumpy` is shared by both on purpose, so review notes
+survive a switch.
 
 **Hunk-level staging:** Use `git add -p` piped via CliWrap, or construct a patch string from selected hunks in the UI and pipe to `git apply --cached` via stdin.
 
