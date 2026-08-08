@@ -1,5 +1,6 @@
 using System.Text;
 using GrumpyGit.Core.Models;
+using GrumpyGit.Core.Agents;
 
 namespace GrumpyGit.Core.LocalModel;
 
@@ -79,12 +80,26 @@ public static class DiffReviewPrompt
         /no_think
         """;
 
-    public static ModelPrompt Build(string path, ParsedDiff diff, FileChangeSummary? summary = null)
+    /// <param name="chunk">
+    /// Which pass of a large file to build. Changes keep their numbering across passes, so
+    /// the model answering "CHANGE 23" in the third pass still means the twenty-third change
+    /// in the file.
+    /// </param>
+    public static ModelPrompt Build(
+        string path, ParsedDiff diff, FileChangeSummary? summary = null, int chunk = 0)
     {
         ArgumentNullException.ThrowIfNull(diff);
 
         var user = new StringBuilder();
         user.Append("File: ").AppendLine(path);
+
+        var chunks = DiffNotebook.ChunkCount(diff);
+        if (chunks > 1)
+            // Said plainly so the model does not describe the file as if it had seen all of
+            // it. It is being shown a part, and a summary claiming otherwise is worse than
+            // a summary that admits the scope.
+            user.Append("Part ").Append(chunk + 1).Append(" of ").Append(chunks)
+                .AppendLine(" — describe only the changes below.");
 
         if (summary is not null && summary.Symbols.Count > 0)
         {
@@ -100,29 +115,28 @@ public static class DiffReviewPrompt
 
         user.AppendLine();
 
-        var omitted = 0;
+        var dropped = 0;
 
-        // Numbered and budgeted by DiffNotebook, not decided here. The view draws a section
-        // per change using the same numbering and the same inclusion, so the model saying
-        // "CHANGE 7" and the reader seeing change 7 depend on there being exactly one
-        // definition of what a change is and one answer to whether it was sent.
+        // Numbered and packed into passes by DiffNotebook, not decided here. The view draws
+        // a section per change using the same numbering, so the model saying "CHANGE 7" and
+        // the reader seeing change 7 depend on there being exactly one definition of what a
+        // change is and one answer to which pass it belongs to.
         foreach (var block in DiffNotebook.Split(diff))
         {
-            // Whole changes are dropped rather than cut: half a change reads as a complete
-            // one that happens to be wrong, which is worse than a stated gap.
-            if (!block.WasSentToModel)
+            if (block.Chunk < 0)
             {
-                omitted++;
+                dropped++;
                 continue;
             }
 
-            user.Append(RenderChange(block));
+            if (block.Chunk == chunk)
+                user.Append(RenderChange(block));
         }
 
-        if (omitted > 0)
+        if (dropped > 0 && chunk == chunks - 1)
             user.AppendLine()
                 .Append("(")
-                .Append(omitted)
+                .Append(dropped)
                 .AppendLine(" further change(s) omitted — this file is larger than the review budget.)");
 
         return new ModelPrompt(SystemInstruction, user.ToString());

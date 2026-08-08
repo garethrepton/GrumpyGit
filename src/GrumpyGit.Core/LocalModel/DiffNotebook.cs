@@ -25,15 +25,20 @@ public sealed record ChangeBlock(
     public int Removed => Lines.Count(l => l.Type == DiffLineType.Removed);
 
     /// <summary>
-    /// Whether this change fitted the prompt budget and was actually put in front of the
-    /// model.
+    /// Which pass of the model this change is shown in, or -1 if it is shown in none.
     ///
-    /// A large file overflows the budget and its later changes are never sent. Those come
-    /// back with no description, which is indistinguishable from "the model read it and had
-    /// nothing to say" unless the view is told the difference — and the two deserve very
-    /// different amounts of the reader's trust.
+    /// A file too large for one prompt is reviewed in several, rather than truncated at the
+    /// budget and the rest left undescribed. Only a file past
+    /// <see cref="DiffNotebook.MaxChunks"/> loses changes entirely, and at that size the
+    /// review is not worth having anyway.
     /// </summary>
-    public bool WasSentToModel { get; init; } = true;
+    public int Chunk { get; init; }
+
+    /// <summary>
+    /// Whether this change is put in front of the model at all. Kept distinct from "has no
+    /// note" because the two deserve very different amounts of the reader's trust.
+    /// </summary>
+    public bool WasSentToModel => Chunk >= 0;
 }
 
 /// <summary>
@@ -138,24 +143,34 @@ public static class DiffNotebook
                 blocks.Add(BlockOf(++number, hunk, run));
         }
 
-        return MarkWhatFitsTheBudget(blocks);
+        return AssignChunks(blocks);
     }
 
     private static ChangeBlock BlockOf(int number, DiffHunk hunk, List<DiffLine> run) =>
         new(number, hunk.HeaderLine, run[0].RenderedLineNumber, run);
 
     /// <summary>
-    /// Flags the changes that fit <see cref="DiffReviewPrompt.DiffCharacterBudget"/>.
+    /// How many passes a file may be reviewed in.
+    ///
+    /// Each is a separate inference, so this is a ceiling on wall-clock rather than on
+    /// correctness: six passes of a CPU-bound small model is already minutes. A file with
+    /// more changes than this fits is one whose review nobody waits for.
+    /// </summary>
+    public const int MaxChunks = 6;
+
+    /// <summary>
+    /// Packs changes into prompt-sized passes.
     ///
     /// Decided here rather than while rendering the prompt so that the prompt, the parser
-    /// and the view all agree on which changes the model was actually shown — the same
-    /// reason the numbering lives here. The cost is estimated from the line contents rather
-    /// than measured on the rendered text, which keeps the two files from having to know
-    /// each other's formatting; a few characters either way does not matter to a budget
-    /// that is itself a round number.
+    /// and the view agree on which pass each change belongs to — the same reason the
+    /// numbering lives here. The cost is estimated from the line contents rather than
+    /// measured on the rendered text, which keeps the two files from having to know each
+    /// other's formatting; a few characters either way does not matter to a budget that is
+    /// itself a round number.
     /// </summary>
-    private static List<ChangeBlock> MarkWhatFitsTheBudget(List<ChangeBlock> blocks)
+    private static List<ChangeBlock> AssignChunks(List<ChangeBlock> blocks)
     {
+        var chunk = 0;
         var spent = 0;
 
         for (var i = 0; i < blocks.Count; i++)
@@ -164,18 +179,27 @@ public static class DiffNotebook
             var cost = blocks[i].HeaderLine.Length + 10
                        + blocks[i].Lines.Sum(l => l.Content.Length + 8);
 
-            // The first change always goes, however large: a review of nothing is worse
-            // than a review of one oversized change.
+            // A change larger than a whole budget still gets a pass of its own rather than
+            // being dropped — it is truncated by the context, which is bad, but silence
+            // about the biggest change in a file is worse.
             if (spent > 0 && spent + cost > DiffReviewPrompt.DiffCharacterBudget)
             {
-                blocks[i] = blocks[i] with { WasSentToModel = false };
-                continue;
+                chunk++;
+                spent = 0;
             }
 
+            blocks[i] = blocks[i] with { Chunk = chunk < MaxChunks ? chunk : -1 };
             spent += cost;
         }
 
         return blocks;
+    }
+
+    /// <summary>How many passes this diff needs. Zero when there is nothing to review.</summary>
+    public static int ChunkCount(ParsedDiff? diff)
+    {
+        var blocks = Split(diff);
+        return blocks.Count == 0 ? 0 : blocks.Max(b => b.Chunk) + 1;
     }
 
     /// <summary>Every change, with its note and any issues anchored inside it.</summary>

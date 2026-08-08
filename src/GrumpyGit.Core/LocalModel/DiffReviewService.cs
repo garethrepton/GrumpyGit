@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using GrumpyGit.Core.Agents;
 using GrumpyGit.Core.Models;
 
 namespace GrumpyGit.Core.LocalModel;
@@ -57,7 +58,7 @@ public sealed record DiffReview(DiffReviewState State, string Text, DiffReviewRe
 /// </summary>
 public sealed class DiffReviewService
 {
-    private readonly ILocalModel _model;
+    private readonly IReviewAgent _model;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, string> _cache = new(StringComparer.Ordinal);
     private readonly Queue<string> _cacheOrder = new();
@@ -77,7 +78,7 @@ public sealed class DiffReviewService
     /// </summary>
     public const int MaxChangedLines = 800;
 
-    public DiffReviewService(ILocalModel model, int cacheCapacity = 200)
+    public DiffReviewService(IReviewAgent model, int cacheCapacity = 200)
     {
         ArgumentNullException.ThrowIfNull(model);
         if (cacheCapacity < 1)
@@ -112,12 +113,17 @@ public sealed class DiffReviewService
     /// superseded request that has not reached the model never runs at all, and one that
     /// has stops between tokens.
     /// </summary>
+    /// <param name="onChunk">
+    /// Receives the review so far after each pass of a multi-pass file, so sections can
+    /// fill in as they are described rather than all at the end.
+    /// </param>
     public async Task<DiffReview> ReviewAsync(
         string path,
         ParsedDiff diff,
         FileChangeSummary? summary = null,
         IProgress<string>? partial = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IProgress<DiffReviewResult>? onChunk = null)
     {
         ArgumentNullException.ThrowIfNull(diff);
 
@@ -168,31 +174,50 @@ public sealed class DiffReviewService
                     return Complete(cached, diff);
             }
 
-            var prompt = DiffReviewPrompt.Build(path, diff, summary);
-            var text = await _model
-                .CompleteAsync(prompt, LocalModelOptions.ForReview(DiffNotebook.Split(diff).Count), partial, ct)
-                .ConfigureAwait(false);
+            // A file too large for one prompt is reviewed in several passes rather than
+            // truncated at the budget. Each pass is a separate inference, so the results
+            // are reported as they land: on a CPU the difference between sections filling
+            // in over two minutes and all of them appearing after two minutes is the
+            // difference between a feature that feels alive and one that feels hung.
+            var chunks = Math.Max(1, DiffNotebook.ChunkCount(diff));
+            var perChunk = ReviewOptions.ForReview(
+                DiffNotebook.Split(diff).Count(b => b.Chunk >= 0) / chunks + 1);
 
-            text = text.Trim();
-            if (text.Length == 0)
-                return DiffReview.Failed("The model returned nothing.");
+            var merged = DiffReviewResult.Empty;
+            var replies = new StringBuilder();
 
-            var parsed = DiffReviewParser.Parse(text, diff);
+            for (var chunk = 0; chunk < chunks; chunk++)
+            {
+                var prompt = DiffReviewPrompt.Build(path, diff, summary, chunk);
+                var text = (await _model
+                    .CompleteAsync(prompt, perChunk, chunk == 0 ? partial : null, ct)
+                    .ConfigureAwait(false)).Trim();
 
-            if (parsed.HasSummary)
+                if (text.Length == 0)
+                    continue;
+
+                replies.AppendLine(text);
+                merged = Merge(merged, DiffReviewParser.Parse(text, diff));
+                onChunk?.Report(merged);
+            }
+
+            if (merged.HasSummary)
             {
                 lock (_cache)
-                    _summaryByPath[path] = parsed.Summary;
+                    _summaryByPath[path] = merged.Summary;
             }
 
             // A reply that parses to nothing at all is a failed review, not an empty one:
             // the model ignored the format, and showing a blank panel would read as "this
             // diff is unremarkable" rather than "ask again".
-            if (!parsed.HasSummary && parsed.ChangeNotes.Count == 0 && !parsed.HasIssues)
+            if (!merged.HasSummary && merged.ChangeNotes.Count == 0 && !merged.HasIssues)
                 return DiffReview.Failed("The model's reply could not be read.");
 
-            Remember(key, text);
-            return new DiffReview(DiffReviewState.Complete, string.Empty, parsed);
+            // Every pass's raw reply, cached as one. Re-parsing the concatenation gives the
+            // same merge back, so a returning reader pays nothing and a change to the parser
+            // still reaches reviews already taken.
+            Remember(key, replies.ToString());
+            return new DiffReview(DiffReviewState.Complete, string.Empty, merged);
         }
         catch (OperationCanceledException)
         {
@@ -267,7 +292,7 @@ public sealed class DiffReviewService
 
             var prompt = ChangeSetReviewPrompt.Build(title, files);
             var text = (await _model
-                .CompleteAsync(prompt, LocalModelOptions.Review, null, ct)
+                .CompleteAsync(prompt, ReviewOptions.Review, null, ct)
                 .ConfigureAwait(false)).Trim();
 
             if (text.Length == 0)
@@ -318,6 +343,23 @@ public sealed class DiffReviewService
 
     private static DiffReview Complete(string reply, ParsedDiff diff) =>
         new(DiffReviewState.Complete, string.Empty, DiffReviewParser.Parse(reply, diff));
+
+    /// <summary>
+    /// Folds one pass's reading into what the earlier passes found.
+    ///
+    /// The notes, issues and concerns are numbered against the whole file, so they simply
+    /// accumulate. The two that cannot are the summary and the risk: each pass writes its
+    /// own, having seen a part. The first summary is kept — it describes the top of the
+    /// file, which is where a reader starts — and the risk takes the worst any pass gave,
+    /// since a danger found in the last third is a danger in the file.
+    /// </summary>
+    private static DiffReviewResult Merge(DiffReviewResult first, DiffReviewResult next) =>
+        new(
+            first.HasSummary ? first.Summary : next.Summary,
+            ScanRanking.RiskWeight(next.Risk) > ScanRanking.RiskWeight(first.Risk) ? next.Risk : first.Risk,
+            [.. first.Issues, .. next.Issues],
+            [.. first.ChangeNotes, .. next.ChangeNotes],
+            [.. first.Concerns, .. next.Concerns]);
 
     private void Remember(string key, string text)
     {

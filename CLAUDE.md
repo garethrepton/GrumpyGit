@@ -31,7 +31,13 @@ decision to raise, not to make quietly.
    day — `Scans/2026-08-07-model-download.html`; the catalogue grew from five entries to nine, and
    then to twelve with the Gemma 4 additions, on 2026-08-08, on request —
    `Scans/2026-08-08-model-library.html`. Every entry is on huggingface.co under the model
-   vendor's own organisation.) Nothing
+   vendor's own organisation.) On 2026-08-08, on request, a third strand was added and it is
+   different in kind: **two review modules that delegate to a CLI the user already installed and
+   already signed in to** — GitHub Copilot CLI and Claude Code — which means the diff leaves the
+   machine when one is chosen (`Scans/2026-08-08-review-modules.html`). This application still
+   opens no socket for it: the CLI does, under the user's own account, and it owns the credential
+   exactly as Git Credential Manager owns git's. Say so plainly rather than hiding behind the
+   process boundary. Nothing
    else — no API client, no telemetry, no update check, no analytics, no third party endpoint —
    gets added on your own initiative, however convenient. Ask, get a yes, then write it. Silence is
    a no. Run `network-audit` after any change that could have added one. A GitHub API client via
@@ -88,7 +94,7 @@ decision to raise, not to make quietly.
 | Code editor / diff viewer | AvaloniaEdit + TextMate grammars | `Avalonia.AvaloniaEdit`, `AvaloniaEdit.TextMate`, `TextMateSharp.Grammars` |
 | Commit graph rendering | Custom Avalonia `DrawingContext` (pvigier lane-assignment algorithm) | — |
 | MVVM | CommunityToolkit.Mvvm | `CommunityToolkit.Mvvm` |
-| Local diff review (optional) | llama.cpp in-process, GGUF supplied by the user — no weights shipped, none downloaded | `LLamaSharp`, `LLamaSharp.Backend.Cpu` |
+| Diff review (optional, one module or none) | Local: llama.cpp in-process. Copilot / Claude Code: the user's own installed CLI, launched as a child process | `LLamaSharp`, `LLamaSharp.Backend.Cpu`, `CliWrap` |
 
 ### Key Architecture Decisions
 
@@ -123,6 +129,30 @@ anywhere else. The AI icon is the sheep with an accent "AI" badge, generated fro
 `tools/generate-ai-icon.ps1` rather than drawn separately, so the two stay one family — regenerate
 it, do not hand-edit it. `%LOCALAPPDATA%\Grumpy` is shared by both on purpose, so review notes
 survive a switch.
+
+**Review modules, chosen by the user and never defaulted:** The review feature is not "on or
+off" — it is a choice between three modules with genuinely different trade-offs, asked once at
+first run and changed in Settings. `IReviewAgent` (`Core/Agents/`) is the seam:
+`DiffReviewService` does the caching, queueing, chunking and parsing and **cannot tell the modules
+apart**. Adding a fourth is a case in `ReviewAgentFactory` and an entry in `ReviewModuleCatalogue`
+— there is no plug-in directory, no discovery, and no way for a settings file or a repository to
+name a module or point one at an arbitrary executable.
+
+- **Local** — llama.cpp in-process. The only one where nothing leaves the machine.
+- **GitHub Copilot** / **Claude Code** — the user's own installed, already-signed-in CLI, driven
+  one prompt at a time as a child process. This is the same argument as Git Credential Manager:
+  the tool that owns the credential keeps it, so there is no token, no API client and no new
+  package here. **The diff goes to their service**, which `ReviewModule.SendsCodeOffMachine`
+  carries as data so that no screen can show a module without being able to say it.
+- **None** — a first-class answer, not a dismissal, and never asked twice.
+
+`AgentProcess` is the `GitProcess` of this system and the only place a module may be spawned. Two
+rules, both blocking: it launches **only a real executable image** — `.cmd`/`.bat` shims from
+`npm install -g` are refused, because Windows runs those through `cmd.exe` which re-parses the
+command line and a diff is full of `"` and `&`; and the child **never starts in the user's
+repository**, because these agents read `AGENTS.md` / `CLAUDE.md` / `copilot-instructions.md` out
+of their working directory, which would let an untrusted clone write prompt text for a tool we
+launched. Do not "fix" the first by writing a cmd escaper.
 
 **Hunk-level staging:** Use `git add -p` piped via CliWrap, or construct a patch string from selected hunks in the UI and pipe to `git apply --cached` via stdin.
 

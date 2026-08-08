@@ -9,33 +9,38 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GrumpyGit.App.Services;
 using GrumpyGit.Core.Git;
+using GrumpyGit.Core.Agents;
 using GrumpyGit.Core.LocalModel;
 using GrumpyGit.Core.Models;
 
 namespace GrumpyGit.App.ViewModels;
 
 /// <summary>
-/// Partial class — the local model's reading of whatever diff is on screen.
+/// Partial class — the chosen review module's reading of whatever diff is on screen.
 ///
 /// Every diff asks for a review, and asks for it in the background: the diff renders when
 /// git answers, and the review appears underneath whenever it is ready. Moving to another
 /// file cancels the one in flight rather than queueing behind it, so the panel always
 /// describes the file you are looking at and never the one you just left.
 ///
-/// Nothing here reaches the network, and nothing is written down. The model file is on
-/// this machine, the prompt is built in memory, and the answer lives as long as the
-/// session does (commandments 1 and 9).
+/// None of that depends on which module answered — that is the whole point of
+/// <see cref="IReviewAgent"/>. What does depend on it is one sentence the user must always
+/// be able to see: whether the diff left this machine. The panel carries the module's badge
+/// for exactly that reason, and <see cref="MainWindowViewModel.Modules"/> holds the choice.
+///
+/// Nothing is written down here whichever module is in use: the prompt is built in memory
+/// and the answer lives as long as the session does (commandment 9).
 /// </summary>
 public partial class MainWindowViewModel
 {
     /// <summary>
-    /// How long a selection has to stand still before it is worth asking the model. Long
+    /// How long a selection has to stand still before it is worth asking the module. Long
     /// enough to skip the files you click past, short enough that a deliberate click feels
     /// immediate.
     /// </summary>
     private static readonly TimeSpan ReviewDebounce = TimeSpan.FromMilliseconds(400);
 
-    private LlamaLocalModel? _localModel;
+    private IReviewAgent? _agent;
     private DiffReviewService? _reviewService;
     private CancellationTokenSource? _reviewCts;
 
@@ -89,14 +94,20 @@ public partial class MainWindowViewModel
     [ObservableProperty] private string _settingsLocalModelPath = string.Empty;
 
     /// <summary>
-    /// True once a model file is configured. Drives whether the panel exists at all — a
-    /// user who has not set one up should see no trace of the feature rather than an
-    /// empty box explaining its absence.
+    /// True once a module is chosen and set up. Drives whether the panel exists at all — a
+    /// user who picked no module should see no trace of the feature rather than an empty
+    /// box explaining its absence.
     /// </summary>
-    public bool HasLocalModel => _localModel?.IsConfigured == true;
+    public bool HasReviewAgent => _agent?.IsConfigured == true;
 
-    /// <summary>Header text: doubles as the status line, so the panel needs no spinner.</summary>
-    public string DiffReviewHeader => IsDiffReviewRunning ? "READING THE DIFF…" : "LOCAL REVIEW";
+    /// <summary>
+    /// Header text: doubles as the status line, so the panel needs no spinner. Names the
+    /// module when idle, because "which of these read my code" is the question a reader has
+    /// every time and should never have to open settings to answer.
+    /// </summary>
+    public string DiffReviewHeader => IsDiffReviewRunning
+        ? "READING THE DIFF…"
+        : ActiveModule?.Badge is { Length: > 0 } badge ? $"{badge} REVIEW" : "REVIEW";
 
     partial void OnIsDiffReviewRunningChanged(bool value)
     {
@@ -108,24 +119,28 @@ public partial class MainWindowViewModel
     private void ToggleDiffReview() => IsDiffReviewVisible = !IsDiffReviewVisible;
 
     /// <summary>
-    /// Builds the model and the review queue from settings. Called at startup and again
-    /// whenever the path changes; the old model is disposed, since weights and a changed
-    /// path have no sensible combined state.
+    /// Builds the agent and the review queue from settings. Called at startup and again
+    /// whenever the module or the model path changes; the old agent is disposed, since
+    /// loaded weights and a changed choice have no sensible combined state.
     /// </summary>
-    private void InitialiseLocalModel(string? modelPath)
+    private void InitialiseReviewAgent(ReviewModuleId module, string? modelPath)
     {
         CancelPendingReview();
 
-        _localModel?.Dispose();
+        (_agent as IDisposable)?.Dispose();
 
-        // The catalogue knows how a model it published wants its turns marked up, which
-        // matters only for the ones whose file does not say — see ChatFormat.
-        _localModel = new LlamaLocalModel(
-            modelPath, ModelOption.ForPath(modelPath)?.ChatFormat ?? ChatFormat.FromModel);
-        _reviewService = new DiffReviewService(_localModel);
+        _agent = ReviewAgentFactory.Create(module, modelPath, AppPaths.AgentWorkDir);
+        _reviewService = _agent is null ? null : new DiffReviewService(_agent);
 
         DiffReviewText = string.Empty;
-        OnPropertyChanged(nameof(HasLocalModel));
+        OnPropertyChanged(nameof(HasReviewAgent));
+        OnPropertyChanged(nameof(ActiveModule));
+        OnPropertyChanged(nameof(ActiveModuleId));
+        OnPropertyChanged(nameof(UsesLocalModule));
+        OnPropertyChanged(nameof(ActiveModuleName));
+        OnPropertyChanged(nameof(ActiveModuleSendsCodeOffMachine));
+        OnPropertyChanged(nameof(ReviewPrivacyLine));
+        OnPropertyChanged(nameof(DiffReviewHeader));
         OnPropertyChanged(nameof(ShowsModelOffer));
         OnPropertyChanged(nameof(IsReviewPanelVisible));
         OnPropertyChanged(nameof(CanRunAiScan));
@@ -153,7 +168,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (!HasLocalModel)
+        if (!HasReviewAgent)
             return;
 
         var summary = ChangeSummaryBuilder.Build(path, parsed);
@@ -190,7 +205,16 @@ public partial class MainWindowViewModel
             // pause costs nothing a reader notices and removes the thrash entirely.
             await Task.Delay(ReviewDebounce, cts.Token);
 
-            var review = await _reviewService!.ReviewAsync(path, parsed, summary, partial, cts.Token);
+            // Each pass of a multi-pass file paints as it lands, so the sections fill in
+            // from the top rather than the whole file appearing at once minutes later.
+            var onChunk = new Progress<DiffReviewResult>(result =>
+            {
+                if (ReferenceEquals(_reviewCts, cts))
+                    ApplyReview(result);
+            });
+
+            var review = await _reviewService!.ReviewAsync(
+                path, parsed, summary, partial, cts.Token, onChunk);
 
             // A result for a file the user has already left is dropped rather than
             // painted over the current one.
@@ -204,12 +228,12 @@ public partial class MainWindowViewModel
                     break;
                 case DiffReviewState.Failed:
                     ClearReview();
-                    DiffReviewText = $"The local model could not read this diff: {review.Text}";
+                    DiffReviewText = $"{ActiveModuleName} could not read this diff: {review.Text}";
                     break;
                 case DiffReviewState.TooLarge:
                     ClearReview();
                     DiffReviewText =
-                        $"This change is too large to review locally — more than {DiffReviewService.MaxChangedLines} lines changed.";
+                        $"This change is too large to review — more than {DiffReviewService.MaxChangedLines} lines changed.";
                     break;
                 default:
                     ClearReview();
@@ -219,7 +243,7 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             if (ReferenceEquals(_reviewCts, cts))
-                DiffReviewText = $"Local review failed: {ex.Message}";
+                DiffReviewText = $"Review failed: {ex.Message}";
         }
         finally
         {
@@ -377,7 +401,7 @@ public partial class MainWindowViewModel
         CancelChangeSetReview();
         ClearChangeSetReview();
 
-        if (_reviewService is null || !HasLocalModel) return;
+        if (_reviewService is null || !HasReviewAgent) return;
 
         var input = files
             .Select(f => new ChangeSetFile(
@@ -528,17 +552,25 @@ public partial class MainWindowViewModel
     private CancellationTokenSource? _downloadCts;
 
     /// <summary>
-    /// True when the offer to fetch a model should be shown: no model configured, and no
-    /// download already running. This is the only thing that ever asks to use the network.
+    /// True when the offer to fetch a model should be shown: the local module is chosen,
+    /// no model is configured yet, and no download is already running.
+    ///
+    /// Gated on the module because the offer is now one module's setup step rather than the
+    /// feature's front door — a user on Copilot has no use for a GGUF and should never be
+    /// asked to fetch one.
     /// </summary>
-    public bool ShowsModelOffer => !HasLocalModel && !IsDownloadingModel && !_modelOfferDeclined;
+    public bool ShowsModelOffer =>
+        ActiveModuleId == ReviewModuleId.Local
+        && !HasLocalModelFile
+        && !IsDownloadingModel
+        && !_modelOfferDeclined;
 
     /// <summary>
     /// The panel exists when there is a review to show, a download running, or an offer to
-    /// make. For a user who has declined, it disappears entirely and the client is exactly
+    /// make. For a user who chose no module it disappears entirely and the client is exactly
     /// what it was before any of this was added.
     /// </summary>
-    public bool IsReviewPanelVisible => HasLocalModel || IsDownloadingModel || ShowsModelOffer;
+    public bool IsReviewPanelVisible => HasReviewAgent || IsDownloadingModel || ShowsModelOffer;
 
     private bool _modelOfferDeclined;
 
@@ -620,35 +652,69 @@ public partial class MainWindowViewModel
     }
 
     /// <summary>
-    /// Applies a saved model path. Rebuilds only when the path actually changed —
+    /// Applies a module and a model path. Rebuilds only when one of them actually changed —
     /// otherwise saving any unrelated setting would drop a loaded model and pay the
     /// several-second reload on the next diff.
     /// </summary>
-    private void ApplyLocalModelSetting(string path)
+    private void ApplyModuleSetting(ReviewModuleId module, string path)
     {
         var trimmed = path?.Trim() ?? string.Empty;
-        if (trimmed.Length > 0 && !File.Exists(trimmed))
+        if (module == ReviewModuleId.Local && trimmed.Length > 0 && !File.Exists(trimmed))
         {
             ShowToast("That model file no longer exists — local review is off.", Controls.ToastSeverity.Warning);
             trimmed = string.Empty;
         }
 
-        if (string.Equals(_localModelPathInUse, trimmed, StringComparison.OrdinalIgnoreCase))
+        if (module == _moduleInUse
+            && string.Equals(_localModelPathInUse, trimmed, StringComparison.OrdinalIgnoreCase))
             return;
 
+        _moduleInUse = module;
         _localModelPathInUse = trimmed;
-        InitialiseLocalModel(trimmed.Length == 0 ? null : trimmed);
+        InitialiseReviewAgent(module, trimmed.Length == 0 ? null : trimmed);
     }
 
     private string _localModelPathInUse = string.Empty;
+    private ReviewModuleId _moduleInUse = ReviewModuleId.None;
 
-    /// <summary>Loads the configured model path at startup, before any diff is opened.</summary>
-    private void InitialiseLocalModelFromSettings()
+    /// <summary>True when the local module has a GGUF to point at.</summary>
+    private bool HasLocalModelFile => _localModelPathInUse.Length > 0;
+
+    /// <summary>Which module is live. Null when the feature is off.</summary>
+    public ReviewModule? ActiveModule => ReviewModuleCatalogue.Find(_moduleInUse);
+
+    public ReviewModuleId ActiveModuleId => _moduleInUse;
+
+    /// <summary>Gates the settings rows that only mean anything for the local module.</summary>
+    public bool UsesLocalModule => _moduleInUse == ReviewModuleId.Local;
+
+    /// <summary>The module's name in a sentence, for the messages that name it.</summary>
+    public string ActiveModuleName => ActiveModule?.Name ?? "The review module";
+
+    /// <summary>
+    /// True when the live module sends the diff off this machine. Drives the one badge the
+    /// panel must never lose: a reader has to be able to tell a private reading from a
+    /// hosted one at a glance, not by remembering what they picked.
+    /// </summary>
+    public bool ActiveModuleSendsCodeOffMachine => ActiveModule?.SendsCodeOffMachine == true;
+
+    /// <summary>
+    /// The line under the panel header: what this reading is worth, and where the diff went
+    /// to produce it. Both halves matter — the first stops a suggestion being read as a
+    /// verdict, and the second is the thing a user must never have to remember.
+    /// </summary>
+    public string ReviewPrivacyLine => ActiveModule is { } module
+        ? $"a suggestion, not a verdict · {module.PrivacyLine}"
+        : "a suggestion, not a verdict";
+
+    /// <summary>Loads the chosen module at startup, before any diff is opened.</summary>
+    private void InitialiseReviewModuleFromSettings()
     {
         var settings = AppSettings.Load();
         SettingsLocalModelPath = settings.LocalModelPath;
         _modelOfferDeclined = settings.LocalModelOfferDeclined;
-        ApplyLocalModelSetting(settings.LocalModelPath);
+        ApplyModuleSetting(settings.ResolveReviewModule(), settings.LocalModelPath);
         BuildModelLibrary();
+        InitialiseModulePicker(settings);
     }
 }

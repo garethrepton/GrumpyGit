@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using GrumpyGit.Core.Agents;
 
 namespace GrumpyGit.Core.LocalModel;
 

@@ -77,19 +77,64 @@ public class DiffReviewPromptTests
         prompt.User.Should().NotContain("Touched: (");
     }
 
-    [Fact]
-    public void AnOversizedFileIsTruncatedByWholeHunksAndSaysSo()
+    private static ParsedDiff FatDiff(int hunkCount)
     {
         var fat = new string('x', 500);
-        var hunks = Enumerable.Range(0, 40)
+        return Diff(Enumerable.Range(0, hunkCount)
             .Select(i => Hunk(i, $"@@ hunk {i} @@", (DiffLineType.Added, fat)))
-            .ToArray();
+            .ToArray());
+    }
 
-        var prompt = DiffReviewPrompt.Build("big.cs", Diff(hunks));
+    [Fact]
+    public void AnOversizedFileIsSplitAcrossPassesRatherThanTruncated()
+    {
+        // The budget is a prompt size, not a limit on how much of a file gets reviewed.
+        // Everything is described; it just takes more than one inference to do it.
+        var diff = FatDiff(40);
 
-        prompt.User.Length.Should().BeLessThan(DiffReviewPrompt.DiffCharacterBudget + 1500);
-        prompt.User.Should().Contain("omitted");
-        prompt.User.Should().Contain("@@ hunk 0 @@", "truncation drops the tail, not the head");
+        DiffNotebook.ChunkCount(diff).Should().BeGreaterThan(1);
+
+        var first = DiffReviewPrompt.Build("big.cs", diff, chunk: 0);
+        var second = DiffReviewPrompt.Build("big.cs", diff, chunk: 1);
+
+        first.User.Length.Should().BeLessThan(DiffReviewPrompt.DiffCharacterBudget + 1500);
+        first.User.Should().Contain("@@ hunk 0 @@", "the first pass starts at the head");
+        first.User.Should().NotContain("omitted", "nothing was dropped — it is in the next pass");
+
+        second.User.Should().NotContain("@@ hunk 0 @@", "passes do not overlap");
+        second.User.Should().Contain("Part 2 of", "the model is told it is seeing a part");
+    }
+
+    [Fact]
+    public void EveryChangeLandsInExactlyOnePass()
+    {
+        var diff = FatDiff(40);
+        var blocks = DiffNotebook.Split(diff);
+
+        blocks.Should().OnlyContain(b => b.Chunk >= 0);
+        blocks.Select(b => b.Number).Should().OnlyHaveUniqueItems();
+
+        // Numbering is global, so a note about change 30 in the last pass still means the
+        // thirtieth change in the file.
+        blocks.Select(b => b.Number).Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public void AFilePastTheChunkCeilingDropsTheTailAndSaysSo()
+    {
+        // Each pass is an inference, so there has to be a ceiling somewhere. Past it the
+        // behaviour is the old one — keep the head, drop the tail, and say that you did.
+        var diff = FatDiff(400);
+        var blocks = DiffNotebook.Split(diff);
+
+        blocks.Should().Contain(b => b.Chunk < 0, "this file is past the ceiling");
+        DiffNotebook.ChunkCount(diff).Should().Be(DiffNotebook.MaxChunks);
+
+        DiffReviewPrompt.Build("huge.cs", diff, chunk: 0).User
+            .Should().Contain("@@ hunk 0 @@", "the head is what survives");
+
+        DiffReviewPrompt.Build("huge.cs", diff, chunk: DiffNotebook.MaxChunks - 1).User
+            .Should().Contain("omitted", "the last pass admits what was left out");
     }
 
     [Fact]

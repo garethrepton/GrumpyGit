@@ -82,11 +82,32 @@
                                    TextWrapping="Wrap"
                                    Text="Experimental. The review is a suggestion, not a verdict — it will miss real bugs and flag things that are fine, so read the diff yourself. Behaviour and the model list may change between releases; the git side is unaffected."/>
 
+                        <!-- Which module, before anything about any one module's setup.
+                             The fields below only mean something once Local is the answer,
+                             and putting the choice under them read as a footnote. -->
+                        <Grid Classes="field" ColumnDefinitions="130,*,Auto" Margin="0,4,0,0">
+                            <TextBlock Grid.Column="0" Text="Reviewed by"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding ActiveModuleName}"
+                                       VerticalAlignment="Center"/>
+                            <Button Grid.Column="2"
+                                    Classes="sm"
+                                    Content="Change…"
+                                    Margin="6,0,0,0"
+                                    Command="{Binding ShowModulePickerCommand}"/>
+                        </Grid>
+
                         <TextBlock Classes="caption tertiary"
                                    TextWrapping="Wrap"
-                                   Text="Point at a GGUF model file to have each diff read by a model running on this machine. Nothing is sent anywhere, and no prompt, diff or answer is written to disk. Qwen2.5-Coder-1.5B-Instruct (Q4_K_M) is a good starting point."/>
+                                   Text="{Binding ReviewPrivacyLine}"/>
 
-                        <Grid Classes="field" ColumnDefinitions="130,*,Auto,Auto" Margin="0,4,0,0">
+                        <TextBlock Classes="caption tertiary"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding UsesLocalModule}"
+                                   Text="Point at a GGUF model file, or download one below. No prompt, diff or answer is written to disk. Qwen2.5-Coder-1.5B-Instruct (Q4_K_M) is a good starting point."/>
+
+                        <Grid Classes="field" ColumnDefinitions="130,*,Auto,Auto" Margin="0,4,0,0"
+                              IsVisible="{Binding UsesLocalModule}">
                             <TextBlock Grid.Column="0" Text="Model file"/>
                             <TextBox Grid.Column="1"
                                      Text="{Binding SettingsLocalModelPath, Mode=TwoWay}"
@@ -105,14 +126,19 @@
 
                         <!-- The model library. Every entry is a fixed URL on one host with a
                              published checksum; Download is the only button in the whole
-                             application that opens a socket to anything but git.exe. -->
-                        <TextBlock Classes="strip-label" Text="MODELS" Margin="0,10,0,0"/>
+                             application that opens a socket to anything but git.exe.
+                             Hidden unless the local module is the one in use — a user on
+                             Copilot has no use for a GGUF and should not be offered one. -->
+                        <TextBlock Classes="strip-label" Text="MODELS" Margin="0,10,0,0"
+                                   IsVisible="{Binding UsesLocalModule}"/>
 
                         <TextBlock Classes="caption tertiary"
                                    TextWrapping="Wrap"
+                                   IsVisible="{Binding UsesLocalModule}"
                                    Text="{Binding ModelLibraryFootprint}"/>
 
-                        <ItemsControl ItemsSource="{Binding ModelLibrary}">
+                        <ItemsControl ItemsSource="{Binding ModelLibrary}"
+                                      IsVisible="{Binding UsesLocalModule}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:CompileBindings="False">
                                     <Border Classes="field" Padding="8,6" Margin="0,0,0,4">

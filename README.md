@@ -34,7 +34,7 @@ Run one, or run both side by side.
 | | **Grumpy** | **Grumpy AI** |
 |---|---|---|
 | Status | Stable | **Experimental** — read the warning above |
-| What it is | The git client | The git client **plus** an offline local model that reads the diff and flags what looks risky |
+| What it is | The git client | The git client **plus** a review pass that reads the diff and flags what looks risky — from a local model, GitHub Copilot, or Claude Code, whichever you pick |
 | Download | **[⬇ Latest Grumpy release](https://github.com/garethrepton/GrumpyGit/releases/latest)** | **[⬇ Latest Grumpy AI release](https://github.com/garethrepton/GrumpyGit/releases?q=ai-v&expanded=true)** |
 | Release chain | `v<version>` | `ai-v<version>` — versioned independently |
 | Installer | `Grumpy-<version>-win-x64-setup.exe` | `Grumpy-AI-<version>-win-x64-setup.exe` |
@@ -49,9 +49,24 @@ Both are per-user installs: no administrator rights, no UAC prompt, uninstall
 from **Apps & features** like any other app. Both are self-contained, so no .NET
 runtime install is required.
 
-**Even Grumpy AI ships no model weights.** You pick one from a short in-app
-catalogue and press download. It then runs in-process on your machine, and your
-code never leaves it.
+**Even Grumpy AI ships no model weights**, and it asks before it reviews anything.
+On first run it puts one question in front of you — who should review your diffs —
+with no default and "nobody" as a real answer:
+
+| Module | What it needs | Where your code goes |
+|---|---|---|
+| **Local model** | A few GB of disk. Pick from a short in-app catalogue and press download | **Nowhere.** It runs in-process on your machine |
+| **GitHub Copilot** | The Copilot CLI, installed and signed in | **To GitHub**, under your own account and its terms |
+| **Claude Code** | The Claude Code CLI, installed and signed in | **To Anthropic**, under your own account and its terms |
+| **Nothing** | — | Nowhere. The panel never appears and nothing is launched |
+
+Change it any time in Settings. The review panel always names the module that
+produced what you are reading, so you never have to remember which you picked.
+
+**Grumpy never handles a token or a password for any of this.** The Copilot and
+Claude Code modules drive the CLI you already signed in to — the same position
+Grumpy takes with git, where Git Credential Manager owns the credential and this
+app has no authentication code at all.
 
 Settings, recent repositories and review notes live in `%LOCALAPPDATA%\Grumpy`
 for **both** products, so they follow you if you switch or run both. That also

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using GrumpyGit.App.Services;
+using GrumpyGit.Core.Agents;
 using GrumpyGit.Core.LocalModel;
 
 namespace GrumpyGit.App.ViewModels;
@@ -165,7 +166,7 @@ public partial class MainWindowViewModel
     private void SaveActiveModelPath(string path)
     {
         SettingsLocalModelPath = path;
-        ApplyLocalModelSetting(path);
+        ApplyModuleSetting(ReviewModuleId.Local, path);
 
         var settings = AppSettings.Load();
         settings.LocalModelPath = path;

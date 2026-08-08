@@ -1494,16 +1494,41 @@
                                     <StackPanel x:Name="StagedSection"
                                                 IsVisible="{Binding IsWorkingTreeSelected}">
                                         <Border Classes="section-header staged">
-                                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
                                                 <TextBlock Grid.Column="0"
                                                            Classes="strip-label"
                                                            Text="STAGED"/>
-                                                <Button Grid.Column="1"
+
+                                                <!-- Which file the model is on. The run takes
+                                                     minutes and shows nothing else while it
+                                                     works. -->
+                                                <TextBlock Grid.Column="1"
+                                                           Classes="caption tertiary"
+                                                           Margin="10,0,6,0"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           IsVisible="{Binding IsAiScanRunning}"
+                                                           Text="{Binding AiScanStatus}"/>
+
+                                                <!-- Reviews every file up front and keeps the
+                                                     results, so reading them afterwards costs
+                                                     nothing. -->
+                                                <Button Grid.Column="2"
+                                                        Classes="stage-btn"
+                                                        Content="AI review all"
+                                                        Command="{Binding ReviewAllFilesCommand}"
+                                                        IsVisible="{Binding CanRunAiScan}"
+                                                        IsEnabled="{Binding !IsAiScanRunning}"
+                                                        Margin="0,0,6,0"
+                                                        VerticalAlignment="Center"
+                                                        ToolTip.Tip="Read every changed file with the local model now, so each review is ready when you open the file"/>
+
+                                                <Button Grid.Column="3"
                                                         x:Name="UnstageSelectedButton"
                                                         Classes="stage-btn"
                                                         Content="Unstage Sel."
                                                         VerticalAlignment="Center"/>
-                                                <Button Grid.Column="2"
+                                                <Button Grid.Column="4"
                                                         Classes="stage-btn"
                                                         Content="Unstage All"
                                                         Command="{Binding UnstageAllCommand}"
@@ -2220,7 +2245,11 @@
                                             <TextBlock Text="EXPERIMENTAL"/>
                                         </Border>
 
-                                        <TextBlock Text="a suggestion, not a verdict · local · nothing leaves this machine"
+                                        <!-- Names the module and says where the diff went.
+                                             Bound rather than written, because the sentence
+                                             is only true of one of the three modules and a
+                                             stale reassurance is worse than none. -->
+                                        <TextBlock Text="{Binding ReviewPrivacyLine}"
                                                    Classes="caption tertiary"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
@@ -2684,6 +2713,17 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+        </Border>
+
+        <!-- ── Review module picker overlay ───────────────────────────────── -->
+        <!-- First run only, and above Settings: it is the one question that has to be
+             answered before the review panel means anything. -->
+        <Border Grid.Row="0" Grid.RowSpan="6"
+                ZIndex="140"
+                Classes="scrim"
+                IsVisible="{Binding IsModulePickerVisible}">
+            <controls:ModulePicker HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
         </Border>
 
         <!-- ── Settings panel overlay ──────────────────────────────────────── -->

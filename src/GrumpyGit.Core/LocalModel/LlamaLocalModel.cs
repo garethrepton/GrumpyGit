@@ -4,10 +4,12 @@ using LLama.Common;
 using LLama.Native;
 using LLama.Sampling;
 
+using GrumpyGit.Core.Agents;
+
 namespace GrumpyGit.Core.LocalModel;
 
 /// <summary>
-/// <see cref="ILocalModel"/> on llama.cpp, via LLamaSharp, in this process.
+/// <see cref="IReviewAgent"/> on llama.cpp, via LLamaSharp, in this process.
 ///
 /// The only type in the application that loads model weights or runs inference. It reads
 /// one file from disk and otherwise touches nothing: no network, no cache directory, no
@@ -18,7 +20,7 @@ namespace GrumpyGit.Core.LocalModel;
 /// changed path have no sensible combined state, so changing the setting disposes this
 /// instance and builds another; there is no half-configured object to reason about.
 /// </summary>
-public sealed class LlamaLocalModel : ILocalModel, IDisposable
+public sealed class LlamaLocalModel : IReviewAgent, IDisposable
 {
     /// <summary>
     /// Enough for the prompt budget plus the answer, and no more. The KV cache is sized
@@ -96,6 +98,8 @@ public sealed class LlamaLocalModel : ILocalModel, IDisposable
         _modelPath = modelPath;
         _chatFormat = chatFormat;
     }
+
+    public ReviewModuleId Module => ReviewModuleId.Local;
 
     public bool IsReady => _executor is not null;
 
@@ -175,7 +179,7 @@ public sealed class LlamaLocalModel : ILocalModel, IDisposable
 
     public async Task<string> CompleteAsync(
         ModelPrompt prompt,
-        LocalModelOptions options,
+        ReviewOptions options,
         IProgress<string>? partial = null,
         CancellationToken ct = default)
     {

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using GrumpyGit.Core.Agents;
 using GrumpyGit.Core.LocalModel;
 using GrumpyGit.Core.Models;
 
@@ -41,8 +42,10 @@ public class DiffReviewServiceTests
 
     // ── Fake ──────────────────────────────────────────────────────────────────
 
-    private sealed class FakeModel : ILocalModel
+    private sealed class FakeModel : IReviewAgent
     {
+        public ReviewModuleId Module => ReviewModuleId.Local;
+        public bool IsConfigured => true;
         public bool IsReady { get; set; } = true;
         public bool LoadSucceeds { get; set; } = true;
         public string? LoadError { get; set; }
@@ -62,7 +65,7 @@ public class DiffReviewServiceTests
         public Task<bool> EnsureLoadedAsync(CancellationToken ct = default) => Task.FromResult(LoadSucceeds);
 
         public async Task<string> CompleteAsync(
-            ModelPrompt prompt, LocalModelOptions options, IProgress<string>? partial = null,
+            ModelPrompt prompt, ReviewOptions options, IProgress<string>? partial = null,
             CancellationToken ct = default)
         {
             var now = Interlocked.Increment(ref Concurrent);

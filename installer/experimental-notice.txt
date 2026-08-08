@@ -3,21 +3,42 @@ GRUMPY AI IS EXPERIMENTAL
 This is not the standard Grumpy git client. It is a separate, experimental
 product, and you should treat its output accordingly.
 
+The first time you run it, it asks one question: who should review your diffs?
+There is no default, and "nobody" is one of the answers.
+
+  * Local model - runs on this machine. Slower and blunter, and the only one
+    where your code is not sent anywhere. Needs a few gigabytes of disk for the
+    weights, which you download from inside the app.
+  * GitHub Copilot - uses the Copilot CLI you have already installed and signed
+    in to. Fast, nothing to download, and the best readings of the three.
+    YOUR DIFF IS SENT TO GITHUB, under your own account and its terms.
+  * Claude Code - uses the Claude Code CLI you have already installed and signed
+    in to. The most thorough reader. YOUR DIFF IS SENT TO ANTHROPIC, under your
+    own account and its terms.
+  * Nothing at all - the review panel never appears and no model or agent is
+    ever launched. A perfectly good answer.
+
+You can change your mind at any time in Settings, and the review panel always
+shows which of these produced what you are reading.
+
 What that means in practice:
 
-  * The local model's review is a suggestion, not a verdict. It will miss real
-    bugs and it will flag things that are fine. Read the diff yourself.
-  * Behaviour, settings and the model catalogue may change between releases.
-  * It is a much larger download than Grumpy, and reviewing a diff will use
-    noticeable CPU and memory while it runs.
+  * The review is a suggestion, not a verdict. It will miss real bugs and it
+    will flag things that are fine. Read the diff yourself.
+  * Behaviour, settings, the module list and the model catalogue may change
+    between releases.
+  * The local model uses noticeable CPU and memory while a review runs. The two
+    agent modules use your Copilot or Claude allowance instead.
 
 What has not changed:
 
   * Every git operation is the same as in Grumpy. Your repositories are handled
     by git.exe exactly as before.
-  * No model weights ship with this installer. You choose one from a short list
-    inside the app and press download.
-  * The model runs on this machine. Your code is not sent anywhere.
+  * No model weights ship with this installer, and nothing is downloaded or
+    sent anywhere until you have chosen a module and asked for it.
+  * Grumpy never handles a token or a password for any of this. The Copilot and
+    Claude Code modules use the CLI you already signed in to, the same way git
+    uses Git Credential Manager.
 
 If you want the git client without any of this, install Grumpy instead. The two
 sit side by side, and installing this one does not replace it.

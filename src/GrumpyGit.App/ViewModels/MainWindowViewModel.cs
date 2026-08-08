@@ -1353,8 +1353,9 @@ public partial class MainWindowViewModel : ViewModelBase
             settings.Save();
 
             // Takes effect on the next diff rather than at the next restart — a model
-            // chosen in a dialog that then appears to do nothing reads as broken.
-            ApplyLocalModelSetting(settings.LocalModelPath);
+            // chosen in a dialog that then appears to do nothing reads as broken. The
+            // module itself is not changed here: that is its own explicit choice.
+            ApplyModuleSetting(ActiveModuleId, settings.LocalModelPath);
             IsSettingsVisible = false;
             ShowToast("Settings saved", Controls.ToastSeverity.Info);
         }

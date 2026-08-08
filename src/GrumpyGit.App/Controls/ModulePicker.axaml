@@ -1,0 +1,109 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GrumpyGit.App.ViewModels"
+             x:Class="GrumpyGit.App.Controls.ModulePicker"
+             x:DataType="vm:MainWindowViewModel">
+
+    <!-- Asked once, on first run.
+
+         The question is not "do you want AI in your git client" — it is "which of
+         these three trade-offs do you want", and the trade-offs are genuinely
+         different. Two send the diff to a service; one does not and is slower for it.
+         So every row states that in the same place, in the same words, before the
+         button that chooses it. Nothing here is pre-selected: a default would be this
+         screen answering its own question. -->
+
+    <Border Classes="card"
+            Padding="{DynamicResource PadDialog}"
+            MaxWidth="640"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center">
+        <StackPanel Spacing="14">
+
+            <StackPanel Spacing="6">
+                <TextBlock Classes="title" Text="Who should review your diffs?"/>
+                <TextBlock Classes="caption"
+                           TextWrapping="Wrap"
+                           Text="Grumpy can put a short reading beside each diff — what the change appears to do, and what to look at twice. Pick where that reading comes from. You can change this later in Settings, and you can pick nothing at all."/>
+            </StackPanel>
+
+            <ItemsControl ItemsSource="{Binding Modules}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                        <Border Classes="card"
+                                Margin="0,0,0,8"
+                                Padding="14">
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+
+                                <StackPanel Grid.Row="0" Grid.Column="0"
+                                            Orientation="Horizontal"
+                                            Spacing="8">
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="14.5"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+
+                                    <!-- The only badge on this screen, and it is on the
+                                         modules that send code away rather than on the one
+                                         that does not. A reader skims badges; the surprising
+                                         thing is what should carry one. -->
+                                    <Border Classes="badge warn"
+                                            IsVisible="{Binding SendsCodeOffMachine}"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="SENDS YOUR CODE"/>
+                                    </Border>
+
+                                    <Border Classes="badge"
+                                            IsVisible="{Binding IsSelected}"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="IN USE"/>
+                                    </Border>
+                                </StackPanel>
+
+                                <Button Grid.Row="0" Grid.Column="1"
+                                        Grid.RowSpan="2"
+                                        Classes="primary sm"
+                                        Content="Use this"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding $parent[ItemsControl].DataContext.ChooseModuleCommand}"
+                                        CommandParameter="{Binding}"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0"
+                                           Classes="caption"
+                                           Margin="0,4,12,0"
+                                           TextWrapping="Wrap"
+                                           Text="{Binding Tagline}"/>
+
+                                <TextBlock Grid.Row="2" Grid.ColumnSpan="2"
+                                           Classes="caption tertiary"
+                                           Margin="0,6,0,0"
+                                           TextWrapping="Wrap"
+                                           Text="{Binding PrivacyLine}"/>
+
+                                <TextBlock Grid.Row="3" Grid.ColumnSpan="2"
+                                           Classes="caption tertiary"
+                                           Margin="0,4,0,0"
+                                           TextWrapping="Wrap"
+                                           IsVisible="{Binding ShowsMissingHint}"
+                                           Text="{Binding MissingHint}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- A real answer, given the same weight as the others rather than being
+                 an X in the corner. Plenty of people want a git client and no language
+                 model anywhere near it, and that is a supported position. -->
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Classes="subtle"
+                        Content="No reviews, thanks"
+                        Command="{Binding ChooseNoModuleCommand}"/>
+                <TextBlock Classes="caption tertiary"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"
+                           Text="Grumpy stays exactly as it is — no panel, no prompt, nothing launched."/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

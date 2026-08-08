@@ -62,7 +62,7 @@ public partial class MainWindowViewModel
         : SelectedCommit is not null && ChangedFiles.Count > 0 ? AiScanScope.Commit
         : AiScanScope.None;
 
-    public bool CanRunAiScan => HasLocalModel && CurrentScanScope != AiScanScope.None;
+    public bool CanRunAiScan => HasReviewAgent && CurrentScanScope != AiScanScope.None;
 
     public bool HasAiScanOverview => AiScanOverview.Length > 0;
 
@@ -120,8 +120,21 @@ public partial class MainWindowViewModel
     /// a small model on a CPU takes tens of seconds a file, and a list that materialised
     /// complete after four minutes would look like a hang for the first three.
     /// </summary>
+    /// <summary>
+    /// Reviews every file without opening the view.
+    ///
+    /// The point is the cache. Each file's reading is kept against its diff, so once this
+    /// has run, clicking through the files shows each review in the same frame as the diff
+    /// instead of starting an inference and waiting. Press it, leave it, come back and read
+    /// the whole change at reading speed rather than at the model's.
+    /// </summary>
     [RelayCommand]
-    private async Task RunAiScanAsync()
+    private Task ReviewAllFilesAsync() => RunScanAsync(openView: false);
+
+    [RelayCommand]
+    private Task RunAiScanAsync() => RunScanAsync(openView: true);
+
+    private async Task RunScanAsync(bool openView)
     {
         if (IsAiScanRunning || _reviewService is null) return;
 
@@ -151,7 +164,7 @@ public partial class MainWindowViewModel
                 Removed = target.Removed,
             });
 
-        IsAiScanVisible = true;
+        IsAiScanVisible = openView;
         IsAiScanRunning = true;
 
         _aiScanCts = new CancellationTokenSource();
@@ -176,6 +189,11 @@ public partial class MainWindowViewModel
             AiScanStatus = "Writing the overview…";
             await BuildAiScanOverviewAsync(ct);
             AiScanStatus = ScanOutcome();
+
+            // A background run finishes with nothing on screen, so it has to say so.
+            if (!openView)
+                ShowToast($"{AiScanStatus} Every file is cached — open one to read it.",
+                    ToastSeverity.Success, 8000);
         }
         catch (OperationCanceledException)
         {

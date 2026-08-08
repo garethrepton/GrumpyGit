@@ -29,6 +29,18 @@ public static class AppPaths
 
     public static string SettingsFile => Path.Combine(Root, "settings.json");
 
+    /// <summary>
+    /// The working directory a CLI review module is started in, and it is deliberately an
+    /// empty folder of ours rather than the repository being reviewed.
+    ///
+    /// Those agents read instructions out of the directory they start in — AGENTS.md,
+    /// CLAUDE.md, .github/copilot-instructions.md, per-project settings — so starting one
+    /// inside a clone from a stranger would hand that repository's text to a tool we
+    /// launched on the user's behalf. Same shape of problem as git's repository-local
+    /// diff.external, and the same answer: do not stand there in the first place.
+    /// </summary>
+    public static string AgentWorkDir => Path.Combine(Root, "agent");
+
     private static string ResolveRoot()
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

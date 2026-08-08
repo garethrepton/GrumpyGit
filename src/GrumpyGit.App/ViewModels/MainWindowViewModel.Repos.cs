@@ -35,7 +35,7 @@ public partial class MainWindowViewModel
 
         // Reads the configured model path only — the weights themselves load lazily, on
         // the first diff, so startup pays nothing for a feature that may not be used.
-        InitialiseLocalModelFromSettings();
+        InitialiseReviewModuleFromSettings();
 
         // Reopen last session's repositories. Deferred to the dispatcher so the
         // constructor returns immediately and the window paints before repo I/O
