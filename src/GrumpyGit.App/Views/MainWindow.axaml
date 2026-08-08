@@ -1389,6 +1389,24 @@
                                             Margin="0,6,8,0"
                                             VerticalAlignment="Center">
 
+                                    <!-- Reads every file in whatever is selected and keeps
+                                         the results, so opening a file afterwards shows its
+                                         review in the same frame as the diff. Here rather
+                                         than on the staged section because CanRunAiScan
+                                         follows the selection — a commit and a pull request
+                                         preview can be read the same way, and the staged
+                                         header only exists for the working tree. -->
+                                    <Button Classes="sm"
+                                            Padding="5,2"
+                                            Command="{Binding ReviewAllFilesCommand}"
+                                            IsVisible="{Binding CanRunAiScan}"
+                                            IsEnabled="{Binding !IsAiScanRunning}"
+                                            ToolTip.Tip="Review every file in this change now, so each reading is ready when you open the file">
+                                        <Path Classes="icon sm ai" Data="{DynamicResource IconSparkles}"/>
+                                    </Button>
+
+                                    <Border Classes="divider" Width="1" Height="14" Margin="3,0"/>
+
                                     <!-- Review-mode toggle sits with the file list, which
                                          is what you are working through when you want it. -->
                                     <ToggleButton IsChecked="{Binding IsDiffFullScreen, Mode=TwoWay}"
@@ -1441,6 +1459,16 @@
                                         </StackPanel>
                                     </ToggleButton>
                                 </StackPanel>
+
+                                <!-- Which file the model is on. Fills what is left between
+                                     the header and the buttons, and the run shows nothing
+                                     else while it works. -->
+                                <TextBlock Classes="caption tertiary"
+                                           Margin="10,6,6,0"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"
+                                           IsVisible="{Binding IsAiScanRunning}"
+                                           Text="{Binding AiScanStatus}"/>
                             </DockPanel>
 
                             <!-- Commit controls — only when working tree selected.
@@ -1494,41 +1522,17 @@
                                     <StackPanel x:Name="StagedSection"
                                                 IsVisible="{Binding IsWorkingTreeSelected}">
                                         <Border Classes="section-header staged">
-                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                                                 <TextBlock Grid.Column="0"
                                                            Classes="strip-label"
                                                            Text="STAGED"/>
 
-                                                <!-- Which file the model is on. The run takes
-                                                     minutes and shows nothing else while it
-                                                     works. -->
-                                                <TextBlock Grid.Column="1"
-                                                           Classes="caption tertiary"
-                                                           Margin="10,0,6,0"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           VerticalAlignment="Center"
-                                                           IsVisible="{Binding IsAiScanRunning}"
-                                                           Text="{Binding AiScanStatus}"/>
-
-                                                <!-- Reviews every file up front and keeps the
-                                                     results, so reading them afterwards costs
-                                                     nothing. -->
                                                 <Button Grid.Column="2"
-                                                        Classes="stage-btn"
-                                                        Content="AI review all"
-                                                        Command="{Binding ReviewAllFilesCommand}"
-                                                        IsVisible="{Binding CanRunAiScan}"
-                                                        IsEnabled="{Binding !IsAiScanRunning}"
-                                                        Margin="0,0,6,0"
-                                                        VerticalAlignment="Center"
-                                                        ToolTip.Tip="Read every changed file with the local model now, so each review is ready when you open the file"/>
-
-                                                <Button Grid.Column="3"
                                                         x:Name="UnstageSelectedButton"
                                                         Classes="stage-btn"
                                                         Content="Unstage Sel."
                                                         VerticalAlignment="Center"/>
-                                                <Button Grid.Column="4"
+                                                <Button Grid.Column="3"
                                                         Classes="stage-btn"
                                                         Content="Unstage All"
                                                         Command="{Binding UnstageAllCommand}"

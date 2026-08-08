@@ -46,9 +46,30 @@ public sealed class CopilotCliAgent : CliReviewAgent
         // no business running a shell, editing a file or reaching for the repository. Deny
         // beats allow-nothing here because the CLI documents deny as taking precedence over
         // both --allow-tool and --allow-all, so no later flag or config can widen it.
-        "--deny-tool", "*",
+        //
+        // Denial is one rule per kind rather than a wildcard: the CLI takes patterns of the
+        // form kind(argument) and rejects "*" outright — "Invalid rule format: *" before the
+        // session even starts. These three are the whole of the kind list bar MCP servers,
+        // which name themselves and so are shut off by the flag below instead.
+        "--deny-tool", "shell",
+        "--deny-tool", "write",
+        "--deny-tool", "url",
+
+        // The built-in GitHub MCP server is the one tool source no deny rule can name in
+        // advance, and a review has no business reaching for an API.
+        "--disable-builtin-mcps",
+
+        // The prompt is the whole of the input. Instruction files belong to whoever wrote
+        // them, and the working directory being ours is not a reason to let a user-level
+        // AGENTS.md quietly rewrite what a review says.
+        "--no-custom-instructions",
 
         // Nothing is watching stdin for an answer. Without this a question is a hang.
         "--no-ask-user",
+
+        // Without this the CLI trails a stats block — duration, token counts, a resume
+        // command — onto stdout, and stdout is what the review parser reads. It would land
+        // in the review text as if the model had written it.
+        "--silent",
     ];
 }

@@ -63,8 +63,19 @@ public class ReviewModuleTests
     {
         var args = CopilotCliAgent.Arguments(Prompt);
 
-        args.Should().ContainInOrder("--deny-tool", "*");
+        // Per kind, because the CLI rejects a wildcard rule at startup rather than treating
+        // it as "everything" — a denial it will not parse is no denial at all.
+        args.Should().ContainInOrder("--deny-tool", "shell");
+        args.Should().ContainInOrder("--deny-tool", "write");
+        args.Should().ContainInOrder("--deny-tool", "url");
+        args.Should().NotContain("*");
+
+        args.Should().Contain("--disable-builtin-mcps");
+        args.Should().Contain("--no-custom-instructions");
         args.Should().Contain("--no-ask-user");
+
+        // Stats on stdout would reach the review parser as if the model had written them.
+        args.Should().Contain("--silent");
 
         // Nothing may widen the deny: allow-all would be the one flag that undoes it.
         args.Should().NotContain("--allow-all");
